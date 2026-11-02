@@ -2,7 +2,7 @@
 window.A4_CONFIG = {
     // Google Apps Script Web App URL (Deploy > Manage deployments, ends in /exec).
     // Until this is set, interviews are kept safely on the device and are NOT sent.
-    appsScriptUrl: '',
+    appsScriptUrl: 'https://script.google.com/macros/s/AKfycby-59ey8nmTd0EuS5ASO_VhR3tZuOAP5AeMsvjKf6TBpP-6GBd5gO5XTnk1oP8WcgmG/exec',
 
     projectName: 'A4 Godagama – Avissawella widening (feasibility study)',
 
