@@ -63,6 +63,7 @@ const COLUMNS = [
   ["Destination Lon", "destinationLon", "num"],
   ["Destination District", "destinationDistrict", "text"],
   ["Destination Type", "destinationType", "text"],
+  ["Trip Frequency", "frequency", "text"],
   ["Commodity", "commodity", "text"],
   ["Load Condition", "load", "text"],
   ["Trip Purpose", "tripPurpose", "text"],
@@ -78,7 +79,7 @@ const EVENT_ID_COL = HEADERS.indexOf("EventID") + 1; // 1-based
 // Categorical columns counted on the Summary tab (per survey date).
 const SUMMARY_FIELDS = [
   "Survey Location", "Direction", "Vehicle Category", "Vehicle Type", "Occupancy", "Origin District", "Destination District",
-  "Origin Type", "Destination Type", "Commodity", "Load Condition", "Trip Purpose",
+  "Origin Type", "Destination Type", "Trip Frequency", "Commodity", "Load Condition", "Trip Purpose",
   "Willing to Use Kahathuduwa-Ingiriya Expressway", "Respondent Is Vehicle Owner", "Monthly Household Income", "GPS Status"
 ];
 const MULTI_FIELDS = []; // no multi-answer questions in this survey

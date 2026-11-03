@@ -133,7 +133,19 @@ const FORM = [
 
     // ---------------- Trip details ----------------
     {
-        id: 'commodity', section: 'Trip details', label: 'Commodity carried', type: 'single', grid: true, showIf: isFreight,
+        id: 'frequency', section: 'Trip details', label: 'How often do you make this trip?', type: 'single', grid: true, other: true,
+        options: [
+            ['Daily', 'fa-calendar-day'],
+            ['Several days a week', 'fa-calendar-week'],
+            ['About once a week', 'fa-calendar'],
+            ['Once in 2 weeks', 'fa-calendar'],
+            ['Monthly', 'fa-calendar-days'],
+            ['Less frequently', 'fa-hourglass-half'],
+            ['First time', 'fa-star']
+        ]
+    },
+    {
+        id: 'commodity', label: 'Commodity carried', type: 'single', grid: true, showIf: isFreight,
         options: [
             'Flour', 'Other foodstuff', 'Tea / Rubber / Coconut', 'Paddy / Rice', 'Vegetables', 'Other agricultural products',
             'Livestock', 'Fish / Dry fish', 'Forestry products', 'Petroleum', 'Chemicals', 'Steel', 'Rubber products',
@@ -1127,6 +1139,7 @@ function buildRecord(fix, interviewId, ts) {
         destinationDistrict: districtValue('destinationDistrict'),
         destinationType: singleValue('destinationType'),
         // Trip details
+        frequency: singleValue('frequency'),
         commodity: singleValue('commodity'),
         load: singleValue('load'),
         tripPurpose: singleValue('tripPurpose'),

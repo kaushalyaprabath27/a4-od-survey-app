@@ -27,6 +27,7 @@ One form per vehicle stopped.
 | 4 / 4a | Origin village / town + district | same |
 | 5 | Type of origin: Home, Work, School / Education, Business, Health, Shopping / Social, Tourism / Leisure, Other | – |
 | | Destination village / town + district, type of destination | destination + district |
+| | Trip frequency: Daily, Several days a week, About once a week, Once in 2 weeks, Monthly, Less frequently, First time, Other (type) | same |
 | | Trip purpose | Commodity (20 types), load: Empty, 1/4, 1/2, 3/4, Full, Overloaded |
 | | Willingness to use the Kahathuduwa – Ingiriya Expressway: Yes / No / Not sure | same |
 | last | **Value of time:** is the respondent the vehicle owner? If yes, monthly household income (8 bands from < Rs. 30,000 to > Rs. 500,000, or prefer not to say) | **Value of time:** approximate value of the goods carried (Rs., or Not known); not asked for empty vehicles |
