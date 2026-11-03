@@ -1,13 +1,12 @@
 // Offline shell for the A4 Roadside O-D Survey PWA.
 // Bump CACHE_NAME whenever app files change so devices pick up the update.
-const CACHE_NAME = 'a4-od-survey-v2';
+const CACHE_NAME = 'a4-od-survey-v3';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
     './style.css',
     './app.js',
     './config.js',
-    './dsd.js',
     './manifest.json',
     './icons/icon-192.png',
     './icons/icon-512.png',

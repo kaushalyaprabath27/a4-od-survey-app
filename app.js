@@ -5,7 +5,9 @@
    are set once per shift; every saved interview records them with its own
    date, time, Form No. and GPS position. Passenger and freight vehicles get
    their own questions (as on the paper forms); origin and destination are a
-   village / town plus the DS Division (its district comes with it).
+   village / town plus its district. The last questions collect the data for
+   the Value of Time (VOT): household income (passenger vehicle owners) and
+   the value of the goods carried (freight vehicles).
 
    Offline-first, like the other survey apps: each saved interview goes to
    localStorage first and is sent to the Apps Script backend in batches
@@ -21,11 +23,12 @@ const CONFIG = Object.assign({
     surveyLocations: [],
     directions: []
 }, window.A4_CONFIG || {});
-const DSD_LIST = Array.isArray(window.A4_DSD) ? window.A4_DSD : [];
 
 const PLACEHOLDER_URL = 'YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE';
 const SURVEY_TYPE = 'a4-roadside-od';
-const SYNC_ACTION = 'submit_a4od_v1';
+// v2: district only (no DSD), no parking / ownership; trip purpose, 6+ count,
+// vehicle owner + household income, commodity value.
+const SYNC_ACTION = 'submit_a4od_v2';
 const BATCH_SIZE = 50;
 const SYNC_INTERVAL_MS = 15000;
 
@@ -45,8 +48,11 @@ const THEME_KEY = 'a4od_theme';
 //            presets: true offers config.js presetLocations first
 //            recent: true also offers places used before on this phone
 //            cities: true = Sri Lankan cities and towns first
-//   dsd    - DS Division picked from dsd.js (its district is saved with it)
-//   other: true adds "Other" with a text box
+//   district - district picked from the list (or 'Not known')
+//   amount - a sum in rupees, or 'Not known'
+//   other: true adds "Other" with a text box (it must be filled in)
+//   more: { option, min, placeholder }  picking that option asks for the
+//            exact number (e.g. '6+' then the number of persons)
 //   grid: true lays the options out in columns
 //   optional: true  not counted in progress and never listed as missing
 //   showIf: answers => boolean  shows the question only when true
@@ -63,8 +69,18 @@ const FREIGHT = 'Freight vehicle';
 const isPax = a => a.vehicleCategory === PASSENGER;
 const isFreight = a => a.vehicleCategory === FREIGHT;
 
-const TRIP_ENDS = [['Home', 'fa-house'], ['Work', 'fa-briefcase'], ['School / Education', 'fa-graduation-cap'], ['Business', 'fa-store'], ['Social', 'fa-people-group']];
-const PARKING = [['Public off-street', 'fa-square-parking'], ['Private off-street', 'fa-warehouse'], ['On-street', 'fa-road'], ['Home', 'fa-house']];
+const TRIP_ENDS = [
+    ['Home', 'fa-house'], ['Work', 'fa-briefcase'], ['School / Education', 'fa-graduation-cap'], ['Business', 'fa-store'],
+    ['Health', 'fa-hospital-user'], ['Shopping / Social', 'fa-bag-shopping'], ['Tourism / Leisure', 'fa-camera']
+];
+const IS_OWNER = 'Yes, the owner';
+const RS = n => 'Rs. ' + n.toLocaleString('en-US');
+
+const DISTRICTS = [
+    'Ampara', 'Anuradhapura', 'Badulla', 'Batticaloa', 'Colombo', 'Galle', 'Gampaha', 'Hambantota', 'Jaffna', 'Kalutara',
+    'Kandy', 'Kegalle', 'Kilinochchi', 'Kurunegala', 'Mannar', 'Matale', 'Matara', 'Moneragala', 'Mullaitivu', 'Nuwara Eliya',
+    'Polonnaruwa', 'Puttalam', 'Ratnapura', 'Trincomalee', 'Vavuniya'
+];
 
 const FORM = [
     // ---------------- Vehicle ----------------
@@ -76,7 +92,8 @@ const FORM = [
         id: 'paxType', label: 'Vehicle type', type: 'single', grid: true, hint: 'Observe', showIf: isPax,
         options: [
             ['Motorcycle', 'fa-motorcycle'],
-            ['3-wheeler / Taxi', TUKTUK_SVG],
+            ['3-wheeler', TUKTUK_SVG],
+            ['Taxi', 'fa-taxi'],
             ['Car / Jeep', 'fa-car-side'],
             ['Passenger van', 'fa-van-shuttle'],
             ['Office van', 'fa-van-shuttle'],
@@ -89,13 +106,13 @@ const FORM = [
             ['Delivery van', 'fa-van-shuttle'],
             ['Small lorry', 'fa-truck-pickup'],
             ['Truck (2 axle)', 'fa-truck'],
-            ['Container', 'fa-truck-moving'],
-            ['Multi-axle', 'fa-truck-ramp-box']
+            ['Container (20 ft / 3 axle)', 'fa-truck-moving'],
+            ['Multi-axle container (40 ft)', 'fa-truck-ramp-box']
         ]
     },
     {
         id: 'occupancy', label: 'Occupancy', type: 'single', hint: 'Persons in the vehicle, including the driver',
-        options: ['1', '2', '3', '4', '5', '6+']
+        options: ['1', '2', '3', '4', '5', '6+'], more: { option: '6+', min: 6, placeholder: 'Number of persons (6 or more)' }
     },
 
     // ---------------- Origin ----------------
@@ -103,18 +120,16 @@ const FORM = [
         id: 'origin', section: 'Origin', label: 'Where did this trip start?', type: 'place', presets: true, recent: true, recentGroup: 'odPlaces', cities: true,
         hint: 'Village / town / location', placeholder: 'Type a village, town or place'
     },
-    { id: 'originDsd', label: 'DS Division of the origin', type: 'dsd', sub: true, hint: 'The district is filled in with it' },
+    { id: 'originDistrict', label: 'District of the origin', type: 'district', sub: true },
     { id: 'originType', label: 'Type of origin', type: 'single', grid: true, other: true, showIf: isPax, options: TRIP_ENDS },
-    { id: 'originParking', label: 'Where was the vehicle parked at the origin?', type: 'single', grid: true, showIf: isPax, options: PARKING },
 
     // ---------------- Destination ----------------
     {
         id: 'destination', section: 'Destination', label: 'Where will this trip end?', type: 'place', presets: true, recent: true, recentGroup: 'odPlaces', cities: true,
         hint: 'Village / town / location', placeholder: 'Type a village, town or place'
     },
-    { id: 'destinationDsd', label: 'DS Division of the destination', type: 'dsd', sub: true, hint: 'The district is filled in with it' },
+    { id: 'destinationDistrict', label: 'District of the destination', type: 'district', sub: true },
     { id: 'destinationType', label: 'Type of destination', type: 'single', grid: true, other: true, showIf: isPax, options: TRIP_ENDS },
-    { id: 'destinationParking', label: 'Where will the vehicle be parked at the destination?', type: 'single', grid: true, showIf: isPax, options: PARKING },
 
     // ---------------- Trip details ----------------
     {
@@ -128,12 +143,40 @@ const FORM = [
     },
     { id: 'load', label: 'Load condition', type: 'single', hint: 'Observe', showIf: isFreight, options: ['Empty', '1/4', '1/2', '3/4', 'Full', 'Overloaded'] },
     {
-        id: 'ownership', label: 'Vehicle ownership', type: 'single', grid: true, showIf: isPax,
-        options: [['Government', 'fa-landmark'], ['Semi-government', 'fa-building-columns'], ['Private', 'fa-user'], ['Hired', 'fa-handshake']]
+        id: 'tripPurpose', label: 'What is the main purpose of this trip?', type: 'single', grid: true, other: true, showIf: isPax,
+        options: [
+            ['Work', 'fa-briefcase'],
+            ['Business', 'fa-store'],
+            ['Education', 'fa-graduation-cap'],
+            ['Healthcare', 'fa-hospital-user'],
+            ['Shopping', 'fa-bag-shopping'],
+            ['Religious activity', 'fa-place-of-worship'],
+            ['Recreation / tourism', 'fa-camera'],
+            ['Accompanying / assisting someone', 'fa-people-arrows']
+        ]
     },
     {
         id: 'expressway', label: 'Would you use the Kahathuduwa – Ingiriya Expressway for this trip?', type: 'single', yesno: true,
         hint: 'Willingness to use the expressway', options: [['Yes', 'fa-circle-check'], ['No', 'fa-circle-xmark'], ['Not sure', 'fa-circle-question']]
+    },
+
+    // ---------------- Value of Time (VOT) ----------------
+    {
+        id: 'isOwner', section: 'Value of time', label: 'Is the respondent the owner of this vehicle?', type: 'single', yesno: true, showIf: isPax,
+        hint: 'Income is asked from the owner only', options: [[IS_OWNER, 'fa-user-check'], ['No', 'fa-user-xmark']]
+    },
+    {
+        id: 'income', label: 'Monthly household income', type: 'single', grid: true, sub: true, showIf: a => isPax(a) && a.isOwner === IS_OWNER,
+        hint: 'Rupees per month, for the Value of Time in the economic analysis',
+        options: [
+            'Less than ' + RS(30000), RS(30000) + ' – ' + RS(50000), RS(50000) + ' – ' + RS(75000), RS(75000) + ' – ' + RS(120000),
+            RS(120000) + ' – ' + RS(200000), RS(200000) + ' – ' + RS(300000), RS(300000) + ' – ' + RS(500000), 'More than ' + RS(500000),
+            'Prefer not to say'
+        ]
+    },
+    {
+        id: 'commodityValue', label: 'Approximate value of the goods carried', type: 'amount', showIf: a => isFreight(a) && a.load !== 'Empty' && a.commodity !== 'Empty',
+        hint: 'Rupees, for the Value of Time in the economic analysis', placeholder: 'e.g. 250000'
     }
 ];
 
@@ -491,7 +534,8 @@ function buildForm() {
         numEls[f.id] = label.querySelector('.q-num');
         q.appendChild(label);
         if (f.type === 'place') buildPlaceField(q, f);
-        else if (f.type === 'dsd') buildDsdField(q, f);
+        else if (f.type === 'district') buildDistrictField(q, f);
+        else if (f.type === 'amount') buildAmountField(q, f);
         else buildChoiceField(q, f);
         formEl.appendChild(q);
     });
@@ -500,9 +544,14 @@ function buildForm() {
 function isAnswered(f) {
     const v = answers[f.id];
     if (f.type === 'place') return !!(v && v.text && v.text.trim());
-    if (f.type === 'dsd') return !!(v && v.dsd);
+    if (f.type === 'district') return !!(v && v.district);
+    if (f.type === 'amount') return !!(v && (v.unknown || +v.amount > 0));
     if (f.type === 'multi') return Array.isArray(v) && v.length > 0;
-    return !!(v && String(v).trim());
+    if (!(v && String(v).trim())) return false;
+    // "Other" needs its text, and e.g. '6+' needs the exact number.
+    if (f.other && v === 'Other' && !(answers[f.id + 'Other'] || '').trim()) return false;
+    if (f.more && v === f.more.option && !(+answers[f.id + 'More'] >= (f.more.min || 0))) return false;
+    return true;
 }
 
 function isVisible(f) { return !f.showIf || !!f.showIf(answers); }
@@ -578,6 +627,7 @@ function buildChoiceField(q, f) {
             renderers[f.id]();
             changed();
             if (value === 'Other' && otherInput && isSelected(f, 'Other')) setTimeout(() => otherInput.focus(), 50);
+            if (f.more && value === f.more.option && moreInput && isSelected(f, value)) setTimeout(() => moreInput.focus(), 50);
         });
         box.appendChild(b);
     });
@@ -588,8 +638,20 @@ function buildChoiceField(q, f) {
         otherInput.type = 'text';
         otherInput.placeholder = 'Please specify';
         otherInput.setAttribute('aria-label', `${f.label}: other, please specify`);
-        otherInput.addEventListener('input', () => { answers[f.id + 'Other'] = otherInput.value; saveDraft(); });
+        otherInput.addEventListener('input', () => { answers[f.id + 'Other'] = otherInput.value; changed(); });
         q.appendChild(otherInput);
+    }
+    let moreInput = null;
+    if (f.more) {
+        moreInput = el('input', 'other-input hidden');
+        moreInput.type = 'number';
+        moreInput.inputMode = 'numeric';
+        moreInput.min = String(f.more.min || 0);
+        moreInput.step = '1';
+        moreInput.placeholder = f.more.placeholder || 'Enter the number';
+        moreInput.setAttribute('aria-label', `${f.label}: exact number`);
+        moreInput.addEventListener('input', () => { answers[f.id + 'More'] = moreInput.value.replace(/[^0-9]/g, ''); changed(); });
+        q.appendChild(moreInput);
     }
 
     renderers[f.id] = () => {
@@ -602,6 +664,10 @@ function buildChoiceField(q, f) {
             otherInput.classList.toggle('hidden', !isSelected(f, 'Other'));
             if (document.activeElement !== otherInput) otherInput.value = answers[f.id + 'Other'] || '';
         }
+        if (moreInput) {
+            moreInput.classList.toggle('hidden', !isSelected(f, f.more.option));
+            if (document.activeElement !== moreInput) moreInput.value = answers[f.id + 'More'] || '';
+        }
     };
 }
 
@@ -610,7 +676,7 @@ function isSelected(f, value) {
     return f.type === 'multi' ? (Array.isArray(v) && v.includes(value)) : v === value;
 }
 
-// ----- Shared type-ahead list (place and DSD fields) -----
+// ----- Shared type-ahead list (place and district fields) -----
 // Builds the input, clear button, suggestion list and status line, and
 // handles keyboard / tap selection. The caller supplies the rows.
 function typeahead(q, f, icon) {
@@ -818,66 +884,45 @@ function buildPlaceField(q, f) {
     };
 }
 
-// ----- DS Division fields (picked from dsd.js) -----
-const DSD_NOT_KNOWN = 'Not known';
-function dsdMatches(text) {
-    const words = text.toLowerCase().split(/[\s,—–\-]+/).filter(Boolean);
-    if (!words.length) return [];
-    const rows = [];
-    DSD_LIST.forEach(([district, dsd]) => {
-        const name = dsd.toLowerCase(), both = `${name} ${district.toLowerCase()}`;
-        if (!words.every(w => both.includes(w))) return;
-        // DS Divisions whose own name starts with the text come first.
-        const rank = name.startsWith(words[0]) ? 0 : name.includes(words[0]) ? 1 : 2;
-        rows.push({ rank, district, dsd });
-    });
-    rows.sort((a, b) => a.rank - b.rank || a.dsd.localeCompare(b.dsd));
-    return rows.slice(0, 40);
-}
-
-function buildDsdField(q, f) {
-    f.placeholder = f.placeholder || 'Type the DS Division or district';
+// ----- District fields (picked from the list) -----
+const NOT_KNOWN = 'Not known';
+function buildDistrictField(q, f) {
+    f.placeholder = f.placeholder || 'Type or pick the district';
     const ta = typeahead(q, f, 'fa-map');
     const { input, clear, status } = ta;
-
     const setStatus = () => {
         const v = answers[f.id];
-        if (v && v.dsd === DSD_NOT_KNOWN) { status.textContent = '✓ Not known'; status.className = 'place-status ok'; }
-        else if (v && v.dsd) { status.textContent = `✓ ${v.district} District`; status.className = 'place-status ok'; }
-        else if (v && v.text) { status.textContent = 'Pick a DS Division from the list'; status.className = 'place-status warn'; }
+        if (v && v.district) { status.textContent = v.district === NOT_KNOWN ? '✓ Not known' : `✓ ${v.district} District`; status.className = 'place-status ok'; }
+        else if (v && v.text) { status.textContent = 'Pick a district from the list'; status.className = 'place-status warn'; }
         else { status.textContent = ''; status.className = 'place-status'; }
     };
-    const rowsFor = text => {
-        const t = text.trim();
-        const found = dsdMatches(t).map(r => ({ main: r.dsd, sub: `${r.district} District`, dsd: r.dsd, district: r.district }));
-        const nk = { main: DSD_NOT_KNOWN, sub: 'Respondent does not know the DS Division', dsd: DSD_NOT_KNOWN, district: '', cls: 's-typed', iconHtml: '<i class="fa-solid fa-circle-question"></i> ' };
-        return t ? found.concat(nk) : [nk];
-    };
     const show = () => {
-        const t = input.value.trim();
-        const rows = rowsFor(t);
-        ta.show(rows, t && rows.length === 1 ? 'No DS Division matches - check the spelling, or type the district.' : (!t ? 'Type a few letters of the DS Division or district.' : null));
+        const t = input.value.trim().toLowerCase();
+        const rows = DISTRICTS.filter(d => !t || d.toLowerCase().includes(t))
+            .sort((x, y) => (x.toLowerCase().startsWith(t) ? 0 : 1) - (y.toLowerCase().startsWith(t) ? 0 : 1) || x.localeCompare(y))
+            .map(d => ({ main: d, district: d }));
+        rows.push({ main: NOT_KNOWN, sub: 'Respondent does not know the district', district: NOT_KNOWN, cls: 's-typed', iconHtml: '<i class="fa-solid fa-circle-question"></i> ' });
+        ta.show(rows, rows.length === 1 ? 'No district matches - check the spelling.' : null);
     };
     ta.onChoose = i => {
         const r = ta.items[i];
         if (!r) return;
-        answers[f.id] = { dsd: r.dsd, district: r.district, text: r.dsd };
-        input.value = r.dsd === DSD_NOT_KNOWN ? DSD_NOT_KNOWN : `${r.dsd} (${r.district})`;
+        answers[f.id] = { district: r.district, text: r.district };
+        input.value = r.district;
         ta.hide();
         clear.classList.remove('hidden');
         changed();
         setStatus();
     };
     ta.onEnter = () => { if (ta.items.length > 1) ta.onChoose(0); };   // the best match
-
     input.addEventListener('input', () => {
-        answers[f.id] = { dsd: '', district: '', text: input.value };
+        answers[f.id] = { district: '', text: input.value };
         changed();
         setStatus();
         clear.classList.toggle('hidden', !input.value);
         show();
     });
-    input.addEventListener('focus', () => { const v = answers[f.id]; if (!(v && v.dsd)) show(); });
+    input.addEventListener('focus', () => { const v = answers[f.id]; if (!(v && v.district)) show(); });
     clear.addEventListener('click', () => {
         input.value = '';
         answers[f.id] = null;
@@ -888,8 +933,51 @@ function buildDsdField(q, f) {
     });
     renderers[f.id] = () => {
         const v = answers[f.id];
-        input.value = !v ? '' : v.dsd === DSD_NOT_KNOWN ? DSD_NOT_KNOWN : v.dsd ? `${v.dsd} (${v.district})` : (v.text || '');
+        input.value = !v ? '' : (v.district || v.text || '');
         clear.classList.toggle('hidden', !input.value);
+        setStatus();
+    };
+}
+
+// ----- Amount fields (rupees, or 'Not known') -----
+function buildAmountField(q, f) {
+    const wrap = el('div', 'amount');
+    wrap.innerHTML = '<span class="amount-unit">Rs.</span>';
+    const input = el('input');
+    input.type = 'text';
+    input.inputMode = 'numeric';
+    input.placeholder = f.placeholder || '';
+    input.setAttribute('aria-labelledby', `lbl-${f.id}`);
+    const nk = el('button', 'chip-opt amount-nk', `<i class="fa-solid fa-circle-question"></i><span>${NOT_KNOWN}</span>`);
+    nk.type = 'button';
+    wrap.append(input, nk);
+    const status = el('div', 'place-status');
+    q.append(wrap, status);
+    const setStatus = () => {
+        const v = answers[f.id] || {};
+        if (v.unknown) { status.textContent = '✓ Not known'; status.className = 'place-status ok'; }
+        else if (+v.amount > 0) { status.textContent = '✓ Rs. ' + (+v.amount).toLocaleString('en-US'); status.className = 'place-status ok'; }
+        else { status.textContent = ''; status.className = 'place-status'; }
+    };
+    input.addEventListener('input', () => {
+        const digits = input.value.replace(/[^0-9]/g, '');
+        if (digits !== input.value) input.value = digits;
+        answers[f.id] = { amount: digits, unknown: false };
+        nk.classList.remove('selected');
+        changed();
+        setStatus();
+    });
+    nk.addEventListener('click', () => {
+        const on = !(answers[f.id] && answers[f.id].unknown);
+        answers[f.id] = on ? { amount: '', unknown: true } : null;
+        renderers[f.id]();
+        changed();
+    });
+    renderers[f.id] = () => {
+        const v = answers[f.id] || {};
+        if (document.activeElement !== input) input.value = v.amount || '';
+        nk.classList.toggle('selected', !!v.unknown);
+        nk.setAttribute('aria-pressed', String(!!v.unknown));
         setStatus();
     };
 }
@@ -986,20 +1074,24 @@ async function googlePlaceLocation(placeId) {
 function shown(id) { const f = FORM.find(x => x.id === id); return !!f && isVisible(f); }
 function singleValue(id) {
     if (!shown(id)) return '';
+    const f = FORM.find(x => x.id === id);
     const v = answers[id] || '';
     if (v === 'Other') {
         const o = (answers[id + 'Other'] || '').trim();
         return o ? `Other: ${o}` : 'Other';
     }
+    if (f.more && v === f.more.option && +answers[id + 'More'] >= (f.more.min || 0)) return String(+answers[id + 'More']);
     return v;
 }
 function placeCols(id, prefix) {
     const v = answers[id] || {};
     return { [prefix]: (v.text || '').trim(), [prefix + 'Lat']: v.lat ?? '', [prefix + 'Lon']: v.lon ?? '' };
 }
-function dsdCols(id, prefix) {
+function districtValue(id) { const v = answers[id] || {}; return v.district || ''; }
+function amountValue(id) {
+    if (!shown(id)) return '';
     const v = answers[id] || {};
-    return { [prefix + 'Dsd']: v.dsd || '', [prefix + 'District']: v.district || '' };
+    return v.unknown ? NOT_KNOWN : (+v.amount > 0 ? +v.amount : '');
 }
 
 function buildRecord(fix, interviewId, ts) {
@@ -1029,18 +1121,20 @@ function buildRecord(fix, interviewId, ts) {
         occupancy: singleValue('occupancy'),
         // Origin / destination
         ...placeCols('origin', 'origin'),
-        ...dsdCols('originDsd', 'origin'),
+        originDistrict: districtValue('originDistrict'),
         originType: singleValue('originType'),
-        originParking: singleValue('originParking'),
         ...placeCols('destination', 'destination'),
-        ...dsdCols('destinationDsd', 'destination'),
+        destinationDistrict: districtValue('destinationDistrict'),
         destinationType: singleValue('destinationType'),
-        destinationParking: singleValue('destinationParking'),
         // Trip details
         commodity: singleValue('commodity'),
         load: singleValue('load'),
-        ownership: singleValue('ownership'),
-        expressway: singleValue('expressway')
+        tripPurpose: singleValue('tripPurpose'),
+        expressway: singleValue('expressway'),
+        // Value of Time
+        isOwner: singleValue('isOwner'),
+        income: singleValue('income'),
+        commodityValue: amountValue('commodityValue')
     };
 }
 

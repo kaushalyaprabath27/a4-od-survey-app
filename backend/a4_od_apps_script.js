@@ -5,6 +5,9 @@
  * No admin registration or login: every recorder's interviews go to the one
  * Google Sheet this script is attached to. One row per vehicle interviewed,
  * with the station, direction and the GPS position recorded when it was saved.
+ * The last columns hold the Value of Time (VOT) data: monthly household
+ * income (passenger vehicle owners) and the value of the goods carried
+ * (freight vehicles).
  *
  * HOW TO DEPLOY:
  * 1. Create a new Google Sheet (e.g. "A4 Roadside OD Survey Data").
@@ -49,25 +52,24 @@ const COLUMNS = [
   ["Interview Location Map Link", "locationMapLink", "long"],
   ["Vehicle Category", "vehicleCategory", "text"],
   ["Vehicle Type", "vehicleType", "text"],
-  ["Occupancy", "occupancy", "text"],
+  ["Occupancy", "occupancy", "numtext"],
   ["Origin (Village / Town)", "origin", "text"],
   ["Origin Lat", "originLat", "num"],
   ["Origin Lon", "originLon", "num"],
-  ["Origin DSD", "originDsd", "text"],
   ["Origin District", "originDistrict", "text"],
   ["Origin Type", "originType", "text"],
-  ["Parking at Origin", "originParking", "text"],
   ["Destination (Village / Town)", "destination", "text"],
   ["Destination Lat", "destinationLat", "num"],
   ["Destination Lon", "destinationLon", "num"],
-  ["Destination DSD", "destinationDsd", "text"],
   ["Destination District", "destinationDistrict", "text"],
   ["Destination Type", "destinationType", "text"],
-  ["Parking at Destination", "destinationParking", "text"],
   ["Commodity", "commodity", "text"],
   ["Load Condition", "load", "text"],
-  ["Vehicle Ownership", "ownership", "text"],
+  ["Trip Purpose", "tripPurpose", "text"],
   ["Willing to Use Kahathuduwa-Ingiriya Expressway", "expressway", "text"],
+  ["Respondent Is Vehicle Owner", "isOwner", "text"],
+  ["Monthly Household Income", "income", "text"],
+  ["Commodity Value (Rs.)", "commodityValue", "numtext"],
   ["EventID", "eventId", "text"]
 ];
 const HEADERS = COLUMNS.map(function (c) { return c[0]; });
@@ -76,8 +78,8 @@ const EVENT_ID_COL = HEADERS.indexOf("EventID") + 1; // 1-based
 // Categorical columns counted on the Summary tab (per survey date).
 const SUMMARY_FIELDS = [
   "Survey Location", "Direction", "Vehicle Category", "Vehicle Type", "Occupancy", "Origin District", "Destination District",
-  "Origin Type", "Parking at Origin", "Destination Type", "Parking at Destination", "Commodity", "Load Condition",
-  "Vehicle Ownership", "Willing to Use Kahathuduwa-Ingiriya Expressway", "GPS Status"
+  "Origin Type", "Destination Type", "Commodity", "Load Condition", "Trip Purpose",
+  "Willing to Use Kahathuduwa-Ingiriya Expressway", "Respondent Is Vehicle Owner", "Monthly Household Income", "GPS Status"
 ];
 const MULTI_FIELDS = []; // no multi-answer questions in this survey
 const SEGMENT_COLUMN = "Date"; // Summary columns: one per survey date
@@ -105,7 +107,9 @@ function handleRequest(e) {
     for (const key in params) data[key] = params[key];
 
     const action = data.action;
-    if (/^submit_a4od_v1$/.test(action || "")) return handleSubmitBatch(data);
+    // v2 = current app (district only, trip purpose, value-of-time questions).
+    // v1 records are still accepted; their retired fields are ignored.
+    if (/^submit_a4od_v[12]$/.test(action || "")) return handleSubmitBatch(data);
     if (!action) return responseJson({ status: "success", message: "A4 roadside O-D survey backend is running." });
     return responseJson({ status: "error", message: "Invalid action" });
   } catch (error) {
@@ -161,6 +165,7 @@ function toRow(item) {
   return COLUMNS.map(function (c) {
     const v = item[c[1]];
     if (c[2] === "num") return num(v);
+    if (c[2] === "numtext") return v !== "" && v !== null && v !== undefined && isFinite(Number(v)) ? Number(v) : text(v, 300);
     return text(v, c[2] === "long" ? 2000 : 300);
   });
 }
@@ -316,8 +321,8 @@ function buildOdMatrix(ss, data, col) {
   const blocks = [["All vehicles", null], ["Passenger vehicles", "Passenger vehicle"], ["Freight vehicles", "Freight vehicle"]];
   const districts = {};
   for (let r = 1; r < data.length; r++) {
-    districts[odKey(data[r][col["Origin District"]], data[r][col["Origin DSD"]])] = true;
-    districts[odKey(data[r][col["Destination District"]], data[r][col["Destination DSD"]])] = true;
+    districts[odKey(data[r][col["Origin District"]])] = true;
+    districts[odKey(data[r][col["Destination District"]])] = true;
   }
   const names = Object.keys(districts).sort(function (a, b) {
     const ua = a.charAt(0) === "(", ub = b.charAt(0) === "(";
@@ -332,8 +337,8 @@ function buildOdMatrix(ss, data, col) {
     for (let r = 1; r < data.length; r++) {
       const row = data[r];
       if (b[1] && String(row[col["Vehicle Category"]]) !== b[1]) continue;
-      const o = odKey(row[col["Origin District"]], row[col["Origin DSD"]]);
-      const d = odKey(row[col["Destination District"]], row[col["Destination DSD"]]);
+      const o = odKey(row[col["Origin District"]]);
+      const d = odKey(row[col["Destination District"]]);
       m[o] = m[o] || {};
       m[o][d] = (m[o][d] || 0) + 1;
       n++;
@@ -360,10 +365,10 @@ function buildOdMatrix(ss, data, col) {
   sheet.autoResizeColumns(1, width);
 }
 
-function odKey(district, dsd) {
+function odKey(district) {
   const d = String(district || "").trim();
-  if (d) return d;
-  return String(dsd || "").trim() === "Not known" ? "(not known)" : "(blank)";
+  if (!d) return "(blank)";
+  return d === "Not known" ? "(not known)" : d;
 }
 
 function total(bySeg) {

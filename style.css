@@ -650,3 +650,7 @@ body.route-full-open .theme-btn, body.route-full-open .topbar, body.route-full-o
 .setup-chips .chip-opt, .modal-chips .chip-opt { flex: 1 1 100%; justify-content: flex-start; }
 .modal-chips { margin: 4px 0 6px; }
 .place-status.warn { color: var(--warn); }
+.amount { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.amount-unit { font-weight: 700; color: var(--text-secondary); }
+.amount input { flex: 1 1 160px; min-width: 0; }
+.amount .amount-nk { flex: 0 0 auto; }
