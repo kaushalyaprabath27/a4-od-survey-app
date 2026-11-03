@@ -22,15 +22,15 @@ One form per vehicle stopped.
 | # | Passenger vehicles | Freight vehicles |
 |---|---|---|
 | 1 | Vehicle category | Vehicle category |
-| 2 | Vehicle type: Motorcycle, 3-wheeler, Taxi, Car / Jeep, Passenger van, Office van, School van | Vehicle type: Delivery van, Small lorry, Truck (2 axle), Container (20 ft / 3 axle), Multi-axle container (40 ft), Other (type it) |
+| 2 | Vehicle type: Motorcycle, 3-wheeler, Taxi, Car / Jeep, Passenger van, Office van, School van, Minibus, Large bus | Vehicle type: Delivery van, Small lorry, Truck (2 axle), Container (20 ft / 3 axle), Multi-axle container (40 ft), Other (type it) |
 | 3 | Occupancy 1–5, or 6+ then the exact number | same |
 | 4 / 4a | Origin village / town + district | same |
 | 5 | Type of origin: Home, Work, School / Education, Business, Health, Shopping / Social, Tourism / Leisure, Other | – |
 | | Destination village / town + district, type of destination | destination + district |
 | | Trip frequency: Daily, Several days a week, About once a week, Once in 2 weeks, Monthly, Less frequently, First time, Other (type) | same |
-| | Trip purpose | Commodity (20 types), load: Empty, 1/4, 1/2, 3/4, Full, Overloaded |
-| | Willingness to use the Kahathuduwa – Ingiriya Expressway: Yes / No / Not sure | same |
-| last | **Value of time:** is the respondent the vehicle owner? If yes, monthly household income (8 bands from < Rs. 30,000 to > Rs. 500,000, or prefer not to say) | **Value of time:** approximate value of the goods carried (Rs.) and approximate load (tonnes), each with Not known; not asked for empty vehicles |
+| | Trip purpose | Commodity: Empty, Vegetables / Fruits, Essential food items, Building materials, Industrial products, Other — with the goods typed in (e.g. potatoes); load: Empty, 1/4, 1/2, 3/4, Full, Overloaded |
+| | In future, would you use the Kahathuduwa – Ingiriya Expressway on this route? Yes / No / Not sure | same |
+| last | **Value of time:** is the respondent the vehicle owner? If yes, monthly household income (8 bands from < Rs. 30,000 to > Rs. 500,000, or prefer not to say) | **Value of time:** approximate value of the goods carried (Rs.) and approximate load with its unit (tonnes, kg, bags, units, litres, cubes, other), each with Not known; not asked for empty vehicles |
 
 Question numbers follow the questions shown, so each form is numbered 1, 2, 3 …
 An "Other" answer counts only once its text is typed.

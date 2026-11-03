@@ -65,13 +65,15 @@ const COLUMNS = [
   ["Destination Type", "destinationType", "text"],
   ["Trip Frequency", "frequency", "text"],
   ["Commodity", "commodity", "text"],
+  ["Commodity Detail", "commodityDetail", "text"],
   ["Load Condition", "load", "text"],
   ["Trip Purpose", "tripPurpose", "text"],
-  ["Willing to Use Kahathuduwa-Ingiriya Expressway", "expressway", "text"],
+  ["Future Use of Kahathuduwa-Ingiriya Expressway", "expressway", "text"],
   ["Respondent Is Vehicle Owner", "isOwner", "text"],
   ["Monthly Household Income", "income", "text"],
   ["Commodity Value (Rs.)", "commodityValue", "numtext"],
-  ["Approx. Load (tonnes)", "loadTonnes", "numtext"],
+  ["Approx. Load", "loadQty", "numtext"],
+  ["Load Unit", "loadUnit", "text"],
   ["EventID", "eventId", "text"]
 ];
 const HEADERS = COLUMNS.map(function (c) { return c[0]; });
@@ -81,7 +83,7 @@ const EVENT_ID_COL = HEADERS.indexOf("EventID") + 1; // 1-based
 const SUMMARY_FIELDS = [
   "Survey Location", "Direction", "Vehicle Category", "Vehicle Type", "Occupancy", "Origin District", "Destination District",
   "Origin Type", "Destination Type", "Trip Frequency", "Commodity", "Load Condition", "Trip Purpose",
-  "Willing to Use Kahathuduwa-Ingiriya Expressway", "Respondent Is Vehicle Owner", "Monthly Household Income", "GPS Status"
+  "Future Use of Kahathuduwa-Ingiriya Expressway", "Load Unit", "Respondent Is Vehicle Owner", "Monthly Household Income", "GPS Status"
 ];
 const MULTI_FIELDS = []; // no multi-answer questions in this survey
 const SEGMENT_COLUMN = "Date"; // Summary columns: one per survey date
@@ -109,9 +111,9 @@ function handleRequest(e) {
     for (const key in params) data[key] = params[key];
 
     const action = data.action;
-    // v2 = current app (district only, trip purpose, value-of-time questions).
-    // v1 records are still accepted; their retired fields are ignored.
-    if (/^submit_a4od_v[12]$/.test(action || "")) return handleSubmitBatch(data);
+    // v3 = current app (commodity groups + details, load amount + unit).
+    // v1 / v2 records are still accepted; their retired fields are ignored.
+    if (/^submit_a4od_v[1-3]$/.test(action || "")) return handleSubmitBatch(data);
     if (!action) return responseJson({ status: "success", message: "A4 roadside O-D survey backend is running." });
     return responseJson({ status: "error", message: "Invalid action" });
   } catch (error) {

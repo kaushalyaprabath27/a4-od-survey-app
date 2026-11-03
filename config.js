@@ -8,21 +8,10 @@ window.A4_CONFIG = {
 
     // Survey stations offered at the start of a shift (any other name can be typed).
     // From OD_Survey_Locations_Map.kmz.
-    surveyLocations: [
-        'OD 1 – A8 near Ingiriya junction (Ratnapura side)',
-        'OD 2 – AB10 near Hanwella junction (west)',
-        'OD 3 – A4 west of Meepe junction',
-        'OD 4 – A4 between Kosgama and Puwakpitiya',
-        'OD 5 – B240 between Padukka and Godagama',
-        'OD 6 – A4 near Godagama junction (east)',
-        'OD 7 – A7 near Talduwa junction (east)'
-    ],
+    surveyLocations: ['OD 1', 'OD 2', 'OD 3', 'OD 4', 'OD 5', 'OD 6', 'OD 7'],
 
     // Direction of travel surveyed, offered at the start of a shift and when switching.
-    directions: [
-        'Towards Colombo / Godagama',
-        'Towards Avissawella'
-    ],
+    directions: ['Towards Colombo', 'Towards Avissawella'],
 
     // Optional. Leave empty to use free OpenStreetMap place suggestions.
     googlePlacesApiKey: '',

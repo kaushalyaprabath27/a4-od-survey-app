@@ -26,9 +26,9 @@ const CONFIG = Object.assign({
 
 const PLACEHOLDER_URL = 'YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE';
 const SURVEY_TYPE = 'a4-roadside-od';
-// v2: district only (no DSD), no parking / ownership; trip purpose, 6+ count,
-// vehicle owner + household income, commodity value.
-const SYNC_ACTION = 'submit_a4od_v2';
+// v3: commodity groups + details, load amount + unit. v2: district only (no DSD),
+// no parking / ownership; trip purpose, 6+ count, owner income, commodity value.
+const SYNC_ACTION = 'submit_a4od_v3';
 const BATCH_SIZE = 50;
 const SYNC_INTERVAL_MS = 15000;
 
@@ -49,7 +49,11 @@ const THEME_KEY = 'a4od_theme';
 //            recent: true also offers places used before on this phone
 //            cities: true = Sri Lankan cities and towns first
 //   district - district picked from the list (or 'Not known')
-//   amount - a number (rupees by default; unit: 'tonnes', decimals: true), or 'Not known'
+//   amount - a number (rupees by default), or 'Not known'
+//            decimals: true allows 2.5;  units: [...] asks for the unit too
+//            (unitOther: true adds 'Other' with a text box)
+//   detail: { except, placeholder }  a single question that also needs the
+//            item typed in for every answer except those listed
 //   other: true adds "Other" with a text box (it must be filled in)
 //   more: { option, min, placeholder }  picking that option asks for the
 //            exact number (e.g. '6+' then the number of persons)
@@ -97,7 +101,9 @@ const FORM = [
             ['Car / Jeep', 'fa-car-side'],
             ['Passenger van', 'fa-van-shuttle'],
             ['Office van', 'fa-van-shuttle'],
-            ['School van', 'fa-bus-simple']
+            ['School van', 'fa-bus-simple'],
+            ['Minibus', 'fa-van-shuttle'],
+            ['Large bus', 'fa-bus']
         ]
     },
     {
@@ -147,11 +153,14 @@ const FORM = [
     {
         id: 'commodity', label: 'Commodity carried', type: 'single', grid: true, showIf: isFreight,
         options: [
-            'Flour', 'Other foodstuff', 'Tea / Rubber / Coconut', 'Paddy / Rice', 'Vegetables', 'Other agricultural products',
-            'Livestock', 'Fish / Dry fish', 'Forestry products', 'Petroleum', 'Chemicals', 'Steel', 'Rubber products',
-            'Other industrial products', 'Motor vehicles', 'Fertilizer', 'Building materials', 'Personal goods',
-            'Empty containers', 'Empty'
-        ]
+            ['Empty', 'fa-box-open'],
+            ['Vegetables / Fruits', 'fa-carrot'],
+            ['Essential food items', 'fa-wheat-awn'],
+            ['Building materials', 'fa-trowel-bricks'],
+            ['Industrial products', 'fa-industry'],
+            ['Other', 'fa-ellipsis']
+        ],
+        detail: { except: ['Empty'], placeholder: 'Type the goods, e.g. potatoes, rice, cement' }
     },
     { id: 'load', label: 'Load condition', type: 'single', hint: 'Observe', showIf: isFreight, options: ['Empty', '1/4', '1/2', '3/4', 'Full', 'Overloaded'] },
     {
@@ -168,8 +177,8 @@ const FORM = [
         ]
     },
     {
-        id: 'expressway', label: 'Would you use the Kahathuduwa – Ingiriya Expressway for this trip?', type: 'single', yesno: true,
-        hint: 'Willingness to use the expressway', options: [['Yes', 'fa-circle-check'], ['No', 'fa-circle-xmark'], ['Not sure', 'fa-circle-question']]
+        id: 'expressway', label: 'In future, would you use the Kahathuduwa – Ingiriya Expressway on this route?', type: 'single', yesno: true,
+        hint: 'Future use of the expressway', options: [['Yes', 'fa-circle-check'], ['No', 'fa-circle-xmark'], ['Not sure', 'fa-circle-question']]
     },
 
     // ---------------- Value of Time (VOT) ----------------
@@ -191,9 +200,10 @@ const FORM = [
         hint: 'Rupees, for the Value of Time in the economic analysis', placeholder: 'e.g. 250000'
     },
     {
-        id: 'loadTonnes', label: 'Approximate load carried', type: 'amount', unit: 'tonnes', decimals: true,
+        id: 'loadQty', label: 'Approximate load carried', type: 'amount', decimals: true,
+        units: ['tonnes', 'kg', 'bags', 'units', 'litres', 'cubes'], unitOther: true,
         showIf: a => isFreight(a) && a.load !== 'Empty' && a.commodity !== 'Empty',
-        hint: 'Weight of the goods in tonnes (e.g. 2.5)', placeholder: 'e.g. 2.5'
+        hint: 'Amount and unit, e.g. 2.5 tonnes or 40 bags', placeholder: 'e.g. 2.5'
     }
 ];
 
@@ -562,12 +572,19 @@ function isAnswered(f) {
     const v = answers[f.id];
     if (f.type === 'place') return !!(v && v.text && v.text.trim());
     if (f.type === 'district') return !!(v && v.district);
-    if (f.type === 'amount') return !!(v && (v.unknown || +v.amount > 0));
+    if (f.type === 'amount') {
+        if (!v) return false;
+        if (v.unknown) return true;
+        if (!(+v.amount > 0)) return false;
+        if (!f.units) return true;
+        return !!v.unit && (v.unit !== 'Other' || !!(v.unitOther || '').trim());
+    }
     if (f.type === 'multi') return Array.isArray(v) && v.length > 0;
     if (!(v && String(v).trim())) return false;
     // "Other" needs its text, and e.g. '6+' needs the exact number.
     if (f.other && v === 'Other' && !(answers[f.id + 'Other'] || '').trim()) return false;
     if (f.more && v === f.more.option && !(+answers[f.id + 'More'] >= (f.more.min || 0))) return false;
+    if (f.detail && !(f.detail.except || []).includes(v) && !(answers[f.id + 'Detail'] || '').trim()) return false;
     return true;
 }
 
@@ -645,6 +662,7 @@ function buildChoiceField(q, f) {
             changed();
             if (value === 'Other' && otherInput && isSelected(f, 'Other')) setTimeout(() => otherInput.focus(), 50);
             if (f.more && value === f.more.option && moreInput && isSelected(f, value)) setTimeout(() => moreInput.focus(), 50);
+            if (detailInput && needsDetail()) setTimeout(() => detailInput.focus(), 50);
         });
         box.appendChild(b);
     });
@@ -658,6 +676,16 @@ function buildChoiceField(q, f) {
         otherInput.addEventListener('input', () => { answers[f.id + 'Other'] = otherInput.value; changed(); });
         q.appendChild(otherInput);
     }
+    let detailInput = null;
+    if (f.detail) {
+        detailInput = el('input', 'other-input hidden');
+        detailInput.type = 'text';
+        detailInput.placeholder = f.detail.placeholder || 'Please specify';
+        detailInput.setAttribute('aria-label', `${f.label}: details`);
+        detailInput.addEventListener('input', () => { answers[f.id + 'Detail'] = detailInput.value; changed(); });
+        q.appendChild(detailInput);
+    }
+    const needsDetail = () => !!f.detail && !!answers[f.id] && !(f.detail.except || []).includes(answers[f.id]);
     let moreInput = null;
     if (f.more) {
         moreInput = el('input', 'other-input hidden');
@@ -680,6 +708,10 @@ function buildChoiceField(q, f) {
         if (otherInput) {
             otherInput.classList.toggle('hidden', !isSelected(f, 'Other'));
             if (document.activeElement !== otherInput) otherInput.value = answers[f.id + 'Other'] || '';
+        }
+        if (detailInput) {
+            detailInput.classList.toggle('hidden', !needsDetail());
+            if (document.activeElement !== detailInput) detailInput.value = answers[f.id + 'Detail'] || '';
         }
         if (moreInput) {
             moreInput.classList.toggle('hidden', !isSelected(f, f.more.option));
@@ -969,7 +1001,7 @@ function cleanAmount(f, text) {
 }
 function buildAmountField(q, f) {
     const wrap = el('div', 'amount');
-    if (!f.unit) wrap.innerHTML = '<span class="amount-unit">Rs.</span>';
+    if (!f.unit && !f.units) wrap.innerHTML = '<span class="amount-unit">Rs.</span>';
     const input = el('input');
     input.type = 'text';
     input.inputMode = f.decimals ? 'decimal' : 'numeric';
@@ -981,17 +1013,54 @@ function buildAmountField(q, f) {
     if (f.unit) wrap.appendChild(el('span', 'amount-unit', escapeHtml(f.unit)));
     wrap.appendChild(nk);
     const status = el('div', 'place-status');
-    q.append(wrap, status);
+    q.append(wrap);
+    // Unit chips (and 'Other' with a text box) for amounts that need a unit.
+    let unitBox = null, unitOther = null;
+    if (f.units) {
+        unitBox = el('div', 'chips unit-chips');
+        unitBox.setAttribute('role', 'radiogroup');
+        f.units.concat(f.unitOther ? ['Other'] : []).forEach(u => {
+            const b = el('button', 'chip-opt', `<span>${escapeHtml(u)}</span>`);
+            b.type = 'button';
+            b.dataset.value = u;
+            b.setAttribute('role', 'radio');
+            b.addEventListener('click', () => {
+                const v = Object.assign({ amount: '' }, answers[f.id] || {}, { unknown: false });
+                v.unit = v.unit === u ? '' : u;
+                answers[f.id] = v;
+                renderers[f.id]();
+                changed();
+                if (v.unit === 'Other' && unitOther) setTimeout(() => unitOther.focus(), 50);
+            });
+            unitBox.appendChild(b);
+        });
+        q.appendChild(unitBox);
+        if (f.unitOther) {
+            unitOther = el('input', 'other-input hidden');
+            unitOther.type = 'text';
+            unitOther.placeholder = 'Type the unit, e.g. barrels, crates';
+            unitOther.setAttribute('aria-label', `${f.label}: other unit`);
+            unitOther.addEventListener('input', () => {
+                answers[f.id] = Object.assign({}, answers[f.id] || {}, { unitOther: unitOther.value });
+                changed();
+                setStatus();
+            });
+            q.appendChild(unitOther);
+        }
+    }
+    q.appendChild(status);
+    const unitName = v => v.unit === 'Other' ? (v.unitOther || '').trim() : (v.unit || '');
     const setStatus = () => {
         const v = answers[f.id] || {};
         if (v.unknown) { status.textContent = '✓ Not known'; status.className = 'place-status ok'; }
-        else if (+v.amount > 0) { status.textContent = '✓ ' + amountText(f, v.amount); status.className = 'place-status ok'; }
+        else if (+v.amount > 0 && f.units && !unitName(v)) { status.textContent = 'Pick the unit'; status.className = 'place-status warn'; }
+        else if (+v.amount > 0) { status.textContent = '✓ ' + (f.units ? `${(+v.amount).toLocaleString('en-US', { maximumFractionDigits: 3 })} ${unitName(v)}` : amountText(f, v.amount)); status.className = 'place-status ok'; }
         else { status.textContent = ''; status.className = 'place-status'; }
     };
     input.addEventListener('input', () => {
         const digits = cleanAmount(f, input.value);
         if (digits !== input.value) input.value = digits;
-        answers[f.id] = { amount: digits, unknown: false };
+        answers[f.id] = Object.assign({}, answers[f.id] || {}, { amount: digits, unknown: false });
         nk.classList.remove('selected');
         changed();
         setStatus();
@@ -1007,6 +1076,15 @@ function buildAmountField(q, f) {
         if (document.activeElement !== input) input.value = v.amount || '';
         nk.classList.toggle('selected', !!v.unknown);
         nk.setAttribute('aria-pressed', String(!!v.unknown));
+        if (unitBox) unitBox.querySelectorAll('.chip-opt').forEach(b => {
+            const on = !v.unknown && v.unit === b.dataset.value;
+            b.classList.toggle('selected', on);
+            b.setAttribute('aria-checked', String(on));
+        });
+        if (unitOther) {
+            unitOther.classList.toggle('hidden', v.unknown || v.unit !== 'Other');
+            if (document.activeElement !== unitOther) unitOther.value = v.unitOther || '';
+        }
         setStatus();
     };
 }
@@ -1122,6 +1200,17 @@ function amountValue(id) {
     const v = answers[id] || {};
     return v.unknown ? NOT_KNOWN : (+v.amount > 0 ? +v.amount : '');
 }
+function amountUnit(id) {
+    if (!shown(id)) return '';
+    const v = answers[id] || {};
+    if (v.unknown) return '';
+    return v.unit === 'Other' ? ((v.unitOther || '').trim() ? `Other: ${(v.unitOther || '').trim()}` : 'Other') : (v.unit || '');
+}
+function detailValue(id) {
+    const f = FORM.find(x => x.id === id);
+    if (!shown(id) || !f.detail || (f.detail.except || []).includes(answers[id])) return '';
+    return (answers[id + 'Detail'] || '').trim();
+}
 
 function buildRecord(fix, interviewId, ts) {
     const now = ts || Date.now();
@@ -1158,6 +1247,7 @@ function buildRecord(fix, interviewId, ts) {
         // Trip details
         frequency: singleValue('frequency'),
         commodity: singleValue('commodity'),
+        commodityDetail: detailValue('commodity'),
         load: singleValue('load'),
         tripPurpose: singleValue('tripPurpose'),
         expressway: singleValue('expressway'),
@@ -1165,7 +1255,8 @@ function buildRecord(fix, interviewId, ts) {
         isOwner: singleValue('isOwner'),
         income: singleValue('income'),
         commodityValue: amountValue('commodityValue'),
-        loadTonnes: amountValue('loadTonnes')
+        loadQty: amountValue('loadQty'),
+        loadUnit: amountUnit('loadQty')
     };
 }
 
