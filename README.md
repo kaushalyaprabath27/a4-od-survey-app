@@ -30,7 +30,7 @@ One form per vehicle stopped.
 | | Trip frequency: Daily, Several days a week, About once a week, Once in 2 weeks, Monthly, Less frequently, First time, Other (type) | same |
 | | Trip purpose | Commodity (20 types), load: Empty, 1/4, 1/2, 3/4, Full, Overloaded |
 | | Willingness to use the Kahathuduwa – Ingiriya Expressway: Yes / No / Not sure | same |
-| last | **Value of time:** is the respondent the vehicle owner? If yes, monthly household income (8 bands from < Rs. 30,000 to > Rs. 500,000, or prefer not to say) | **Value of time:** approximate value of the goods carried (Rs., or Not known); not asked for empty vehicles |
+| last | **Value of time:** is the respondent the vehicle owner? If yes, monthly household income (8 bands from < Rs. 30,000 to > Rs. 500,000, or prefer not to say) | **Value of time:** approximate value of the goods carried (Rs.) and approximate load (tonnes), each with Not known; not asked for empty vehicles |
 
 Question numbers follow the questions shown, so each form is numbered 1, 2, 3 …
 An "Other" answer counts only once its text is typed.

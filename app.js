@@ -49,7 +49,7 @@ const THEME_KEY = 'a4od_theme';
 //            recent: true also offers places used before on this phone
 //            cities: true = Sri Lankan cities and towns first
 //   district - district picked from the list (or 'Not known')
-//   amount - a sum in rupees, or 'Not known'
+//   amount - a number (rupees by default; unit: 'tonnes', decimals: true), or 'Not known'
 //   other: true adds "Other" with a text box (it must be filled in)
 //   more: { option, min, placeholder }  picking that option asks for the
 //            exact number (e.g. '6+' then the number of persons)
@@ -189,6 +189,11 @@ const FORM = [
     {
         id: 'commodityValue', label: 'Approximate value of the goods carried', type: 'amount', showIf: a => isFreight(a) && a.load !== 'Empty' && a.commodity !== 'Empty',
         hint: 'Rupees, for the Value of Time in the economic analysis', placeholder: 'e.g. 250000'
+    },
+    {
+        id: 'loadTonnes', label: 'Approximate load carried', type: 'amount', unit: 'tonnes', decimals: true,
+        showIf: a => isFreight(a) && a.load !== 'Empty' && a.commodity !== 'Empty',
+        hint: 'Weight of the goods in tonnes (e.g. 2.5)', placeholder: 'e.g. 2.5'
     }
 ];
 
@@ -951,28 +956,40 @@ function buildDistrictField(q, f) {
     };
 }
 
-// ----- Amount fields (rupees, or 'Not known') -----
+// ----- Amount fields (rupees or another unit, or 'Not known') -----
+function amountText(f, v) {
+    const n = +v;
+    return f.unit ? `${n.toLocaleString('en-US', { maximumFractionDigits: 3 })} ${f.unit}` : 'Rs. ' + n.toLocaleString('en-US');
+}
+function cleanAmount(f, text) {
+    if (!f.decimals) return text.replace(/[^0-9]/g, '');
+    const t = text.replace(/,/g, '.').replace(/[^0-9.]/g, '');
+    const i = t.indexOf('.');
+    return i < 0 ? t : t.slice(0, i + 1) + t.slice(i + 1).replace(/\./g, '');
+}
 function buildAmountField(q, f) {
     const wrap = el('div', 'amount');
-    wrap.innerHTML = '<span class="amount-unit">Rs.</span>';
+    if (!f.unit) wrap.innerHTML = '<span class="amount-unit">Rs.</span>';
     const input = el('input');
     input.type = 'text';
-    input.inputMode = 'numeric';
+    input.inputMode = f.decimals ? 'decimal' : 'numeric';
     input.placeholder = f.placeholder || '';
     input.setAttribute('aria-labelledby', `lbl-${f.id}`);
     const nk = el('button', 'chip-opt amount-nk', `<i class="fa-solid fa-circle-question"></i><span>${NOT_KNOWN}</span>`);
     nk.type = 'button';
-    wrap.append(input, nk);
+    wrap.append(input);
+    if (f.unit) wrap.appendChild(el('span', 'amount-unit', escapeHtml(f.unit)));
+    wrap.appendChild(nk);
     const status = el('div', 'place-status');
     q.append(wrap, status);
     const setStatus = () => {
         const v = answers[f.id] || {};
         if (v.unknown) { status.textContent = '✓ Not known'; status.className = 'place-status ok'; }
-        else if (+v.amount > 0) { status.textContent = '✓ Rs. ' + (+v.amount).toLocaleString('en-US'); status.className = 'place-status ok'; }
+        else if (+v.amount > 0) { status.textContent = '✓ ' + amountText(f, v.amount); status.className = 'place-status ok'; }
         else { status.textContent = ''; status.className = 'place-status'; }
     };
     input.addEventListener('input', () => {
-        const digits = input.value.replace(/[^0-9]/g, '');
+        const digits = cleanAmount(f, input.value);
         if (digits !== input.value) input.value = digits;
         answers[f.id] = { amount: digits, unknown: false };
         nk.classList.remove('selected');
@@ -1147,7 +1164,8 @@ function buildRecord(fix, interviewId, ts) {
         // Value of Time
         isOwner: singleValue('isOwner'),
         income: singleValue('income'),
-        commodityValue: amountValue('commodityValue')
+        commodityValue: amountValue('commodityValue'),
+        loadTonnes: amountValue('loadTonnes')
     };
 }
 

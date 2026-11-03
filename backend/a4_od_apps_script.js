@@ -71,6 +71,7 @@ const COLUMNS = [
   ["Respondent Is Vehicle Owner", "isOwner", "text"],
   ["Monthly Household Income", "income", "text"],
   ["Commodity Value (Rs.)", "commodityValue", "numtext"],
+  ["Approx. Load (tonnes)", "loadTonnes", "numtext"],
   ["EventID", "eventId", "text"]
 ];
 const HEADERS = COLUMNS.map(function (c) { return c[0]; });
