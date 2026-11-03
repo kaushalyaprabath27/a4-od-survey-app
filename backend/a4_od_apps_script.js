@@ -2,7 +2,7 @@
  * A4 GODAGAMA - AVISSAWELLA WIDENING (FEASIBILITY STUDY) - ROADSIDE O-D SURVEY
  * APPS SCRIPT BACKEND
  *
- * No admin registration or login: every recorder's interviews go to the one
+ * No login for recorders: every recorder's interviews go to the one
  * Google Sheet this script is attached to. One row per vehicle interviewed,
  * with the station, direction and the GPS position recorded when it was saved.
  * The last columns hold the Value of Time (VOT) data: monthly household
@@ -24,6 +24,11 @@
  * UPDATING THE CODE LATER:
  *    Deploy > Manage deployments > Edit (pencil) > Version: "New version"
  *    > Deploy. The URL stays the same.
+ *
+ * ADMIN DASHBOARD (admin.html in the app): live progress against the
+ * targets in the "Targets" tab, plus the answers analysed. Set the password
+ * once: Project Settings (gear) > Script properties > Add script property >
+ * ADMIN_PASSWORD = the password. It is not written in this file.
  *
  * SUMMARY + O-D MATRIX: open the sheet, menu "A4 O-D Survey" > Build / refresh
  * summary. It writes a "Summary" tab (counts per answer and survey date) and
@@ -114,6 +119,7 @@ function handleRequest(e) {
     // v3 = current app (commodity groups + details, load amount + unit).
     // v1 / v2 records are still accepted; their retired fields are ignored.
     if (/^submit_a4od_v[1-3]$/.test(action || "")) return handleSubmitBatch(data);
+    if (action === "admin_stats" || action === "admin_set_targets") return handleAdmin(data);
     if (!action) return responseJson({ status: "success", message: "A4 roadside O-D survey backend is running." });
     return responseJson({ status: "error", message: "Invalid action" });
   } catch (error) {
@@ -256,10 +262,192 @@ function checkGlobalRateLimit() {
   return true;
 }
 
-// Run once from the editor: creates the data tab + header row and asks for
+// ---------------------------------------------------------------------
+// Admin dashboard (admin.html): progress against the targets + analysis.
+// The password is NOT kept in this file (the code is on GitHub): set it once
+// in the Apps Script editor, Project Settings (gear) > Script properties >
+// Add property: ADMIN_PASSWORD = your password.
+// ---------------------------------------------------------------------
+const TARGETS_SHEET_NAME = "Targets";
+const SURVEY_HOURS_DEFAULT = 12;
+const ADMIN_MAX_FAILS = 10; // wrong passwords allowed per 10 minutes
+
+// Vehicle classes of the sampling plan, and the app's vehicle types counted in each.
+const VEHICLE_CLASSES = [
+  ["Motor Cycles", "Passenger", ["Motorcycle"]],
+  ["Three Wheeler", "Passenger", ["3-wheeler"]],
+  ["Car/Jeep/SUV/Double Cab", "Passenger", ["Taxi", "Car / Jeep"]],
+  ["Van", "Passenger", ["Passenger van", "Office van", "School van"]],
+  ["Mini Bus", "Passenger", ["Minibus"]],
+  ["Large Bus", "Passenger", ["Large bus"]],
+  ["Small Truck", "Freight", ["Delivery van", "Small lorry"]],
+  ["Medium Truck", "Freight", ["Truck (2 axle)"]],
+  ["Heavy Truck", "Freight", ["Container (20 ft / 3 axle)"]],
+  ["Container", "Freight", ["Multi-axle container (40 ft)"]],
+  ["Other freight", "Freight", ["Other"]]
+];
+// Targets filled in when the Targets tab is first made (OD 2 from the sampling
+// plan). Change them in the Targets tab or on the dashboard.
+const DEFAULT_TARGETS = {
+  "OD 2": { "Motor Cycles": 800, "Three Wheeler": 550, "Car/Jeep/SUV/Double Cab": 525, "Van": 125, "Mini Bus": 25,
+            "Small Truck": 300, "Medium Truck": 400, "Heavy Truck": 75, "Container": 50 }
+};
+const STATIONS = ["OD 1", "OD 2", "OD 3", "OD 4", "OD 5", "OD 6", "OD 7"];
+
+// Answers counted on the dashboard: [key, sheet header].
+const ADMIN_FIELDS = [
+  ["direction", "Direction"], ["type", "Vehicle Type"], ["originDistrict", "Origin District"],
+  ["destinationDistrict", "Destination District"], ["tripPurpose", "Trip Purpose"], ["frequency", "Trip Frequency"],
+  ["expressway", "Future Use of Kahathuduwa-Ingiriya Expressway"], ["commodity", "Commodity"], ["load", "Load Condition"],
+  ["income", "Monthly Household Income"]
+];
+
+function vehicleClass(category, type) {
+  const t = String(type || "").trim();
+  for (let i = 0; i < VEHICLE_CLASSES.length; i++) {
+    if (VEHICLE_CLASSES[i][2].indexOf(t) >= 0) return VEHICLE_CLASSES[i][0];
+  }
+  if (/^Other/.test(t) && /Freight/.test(category)) return "Other freight";
+  return t ? "Other (" + t + ")" : "(no type)";
+}
+function classGroup(name) {
+  for (let i = 0; i < VEHICLE_CLASSES.length; i++) if (VEHICLE_CLASSES[i][0] === name) return VEHICLE_CLASSES[i][1];
+  return "Other";
+}
+
+function checkAdmin(password) {
+  const expected = PropertiesService.getScriptProperties().getProperty("ADMIN_PASSWORD");
+  if (!expected) return "The admin password is not set yet. In Apps Script: Project Settings > Script properties > add ADMIN_PASSWORD.";
+  const cache = CacheService.getScriptCache();
+  const fails = parseInt(cache.get("admin_fails") || "0", 10);
+  if (fails >= ADMIN_MAX_FAILS) return "Too many wrong passwords. Try again in 10 minutes.";
+  if (String(password || "") !== expected) {
+    cache.put("admin_fails", String(fails + 1), 600);
+    return "Wrong password.";
+  }
+  return "";
+}
+
+function handleAdmin(data) {
+  const problem = checkAdmin(data.password);
+  if (problem) return responseJson({ status: "error", auth: false, message: problem });
+  if (data.action === "admin_set_targets") {
+    const lock = LockService.getScriptLock();
+    if (!lock.tryLock(LOCK_WAIT_MS)) return responseJson({ status: "error", message: "Server busy. Try again." });
+    try { saveTargets(data.targets || {}); } finally { lock.releaseLock(); }
+  }
+  return responseJson(adminStats());
+}
+
+// Targets tab: one row per station: Station | Survey hours | one column per vehicle class.
+function getTargetsSheet() {
+  const ss = getSpreadsheet();
+  let sheet = ss.getSheetByName(TARGETS_SHEET_NAME);
+  if (sheet) return sheet;
+  sheet = ss.insertSheet(TARGETS_SHEET_NAME);
+  const head = ["Station", "Survey hours"].concat(VEHICLE_CLASSES.map(function (c) { return c[0]; }));
+  const rows = STATIONS.map(function (st) {
+    const t = DEFAULT_TARGETS[st] || {};
+    return [st, SURVEY_HOURS_DEFAULT].concat(VEHICLE_CLASSES.map(function (c) { return t[c[0]] === undefined ? "" : t[c[0]]; }));
+  });
+  sheet.getRange(1, 1, 1, head.length).setValues([head]).setFontWeight("bold");
+  sheet.getRange(2, 1, rows.length, head.length).setValues(rows);
+  sheet.setFrozenRows(1);
+  return sheet;
+}
+
+function readTargets() {
+  const values = getTargetsSheet().getDataRange().getValues();
+  const head = values[0].map(String);
+  const out = {};
+  for (let r = 1; r < values.length; r++) {
+    const st = String(values[r][0]).trim();
+    if (!st) continue;
+    const t = { hours: Number(values[r][1]) || SURVEY_HOURS_DEFAULT, byClass: {} };
+    for (let c = 2; c < head.length; c++) {
+      if (values[r][c] !== "" && isFinite(Number(values[r][c]))) t.byClass[head[c]] = Number(values[r][c]);
+    }
+    out[st] = t;
+  }
+  return out;
+}
+
+function saveTargets(targets) {
+  const sheet = getTargetsSheet();
+  const values = sheet.getDataRange().getValues();
+  const head = values[0].map(String);
+  Object.keys(targets).forEach(function (st) {
+    if (STATIONS.indexOf(st) === -1) return;
+    const t = targets[st] || {};
+    let r = 1;
+    while (r < values.length && String(values[r][0]).trim() !== st) r++;
+    if (r === values.length) values.push(head.map(function () { return ""; }));
+    values[r][0] = st;
+    const hours = Number(t.hours);
+    if (hours > 0 && hours <= 24) values[r][1] = hours;
+    const byClass = t.byClass || {};
+    for (let c = 2; c < head.length; c++) {
+      if (!(head[c] in byClass)) continue;
+      const v = byClass[head[c]];
+      values[r][c] = v === "" || v === null ? "" : (isFinite(Number(v)) && Number(v) >= 0 ? Math.round(Number(v)) : values[r][c]);
+    }
+  });
+  sheet.getRange(1, 1, values.length, head.length).setValues(values);
+}
+
+// Counts for the dashboard as [station, date, what, value, n] rows; the page
+// adds them up for the station and date picked.
+function adminStats() {
+  const sheet = getDataSheet();
+  const last = sheet.getLastRow();
+  const rows = last > 1 ? sheet.getRange(2, 1, last - 1, HEADERS.length).getDisplayValues() : [];
+  const col = {};
+  HEADERS.forEach(function (h, i) { col[h] = i; });
+  const agg = {};
+  const add = function (st, date, what, value) {
+    const k = [st, date, what, value].join("\u0001");
+    agg[k] = (agg[k] || 0) + 1;
+  };
+  const recorders = {};
+  rows.forEach(function (r) {
+    const st = String(r[col["Survey Location"]] || "").trim() || "(no station)";
+    const date = String(r[col["Date"]] || "").trim() || "(no date)";
+    const time = String(r[col["Time"]] || "").trim();
+    const m = /^(\d{1,2})/.exec(time);
+    const hour = m ? ("0" + m[1]).slice(-2) : "??";
+    const cls = vehicleClass(String(r[col["Vehicle Category"]]).trim(), r[col["Vehicle Type"]]);
+    add(st, date, "class", cls);
+    add(st, date, "hour", hour + "|" + classGroup(cls));
+    ADMIN_FIELDS.forEach(function (f) {
+      let v = String(r[col[f[1]]] || "").trim();
+      if (!v) return;
+      if (/^Other:/.test(v)) v = "Other";
+      add(st, date, f[0], v);
+    });
+    const name = String(r[col["Recorder"]] || "").trim() || "(no name)";
+    add(st, date, "recorder", name);
+    const stamp = date + " " + time;
+    const rec = recorders[name];
+    if (!rec || stamp > rec.last) recorders[name] = { station: st, last: stamp };
+  });
+  return {
+    status: "success",
+    survey: "od",
+    generated: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss"),
+    total: rows.length,
+    stations: STATIONS,
+    classes: VEHICLE_CLASSES.map(function (c) { return { name: c[0], group: c[1], types: c[2] }; }),
+    targets: readTargets(),
+    counts: Object.keys(agg).map(function (k) { return k.split("\u0001").concat([agg[k]]); }),
+    recorders: Object.keys(recorders).map(function (n) { return { name: n, station: recorders[n].station, last: recorders[n].last }; })
+  };
+}
+
+// Run once from the editor: creates the data and Targets tabs and asks for
 // the permissions the web app needs.
 function setup() {
   const sheet = getDataSheet();
+  getTargetsSheet();
   Logger.log("Data sheet ready: " + sheet.getParent().getUrl());
 }
 
@@ -275,7 +463,7 @@ function onOpen() {
 
 function buildSummary() {
   const ss = getSpreadsheet();
-  const data = getDataSheet().getDataRange().getValues();
+  const data = getDataSheet().getDataRange().getDisplayValues();
   const col = {};
   HEADERS.forEach(function (h, i) { col[h] = i; });
 

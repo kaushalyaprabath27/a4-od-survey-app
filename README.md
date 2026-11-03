@@ -35,6 +35,26 @@ One form per vehicle stopped.
 Question numbers follow the questions shown, so each form is numbered 1, 2, 3 …
 An "Other" answer counts only once its text is typed.
 
+## Admin dashboard
+
+`admin.html` (also linked from the app's first screen; the same page is in the bus app)
+shows both surveys live: logs in with the admin password, then by station and date:
+
+- **Vehicle O-D:** progress against the sampling targets per vehicle class (total to be
+  surveyed, surveyed, remaining, %), passenger / freight totals with the number needed
+  per hour, interviews per hour, recorders, and the answers (direction, districts, trip
+  purpose, frequency, expressway use, commodity, load, income).
+- **Bus survey:** buses per hour and per route, To / From Colombo, operator, size and
+  passenger bands.
+- Targets live in the sheet's **Targets** tab (one row per station: survey hours and a
+  target per class; OD 2 is filled in from the sampling plan). Edit them there or with
+  **Edit targets** on the dashboard (pick one station first).
+- App vehicle types are counted in the plan's classes as listed in `VEHICLE_CLASSES`
+  in the backend (e.g. Taxi + Car / Jeep → Car/Jeep/SUV/Double Cab).
+- **Password:** not stored in the code. In each Apps Script project: Project Settings
+  (gear) → Script properties → Add script property → `ADMIN_PASSWORD`. After 10 wrong
+  tries the login is locked for 10 minutes.
+
 ## Setting up
 
 1. **Backend:** follow the steps at the top of `backend/a4_od_apps_script.js`
@@ -47,6 +67,7 @@ An "Other" answer counts only once its text is typed.
 
 ## In the Google Sheet
 
+- `Targets`: sampling targets per station and vehicle class (for the dashboard).
 - `a4-roadside-od`: one row per vehicle (Form No, recorder, station, direction, GPS,
   vehicle, origin / destination with district, trip details, expressway, VOT data).
 - Menu **A4 O-D Survey → Build / refresh summary** writes:
@@ -56,6 +77,6 @@ An "Other" answer counts only once its text is typed.
 
 ## Files
 
-`index.html`, `style.css`, `app.js` (questionnaire in the `FORM` list), `config.js`,
+`index.html`, `style.css`, `app.js`, `admin.html` / `admin.js` / `admin.css` (questionnaire in the `FORM` list), `config.js`,
 `sw.js`, `manifest.json`, `icons/`,
 `backend/a4_od_apps_script.js`.
