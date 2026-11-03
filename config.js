@@ -7,13 +7,15 @@ window.A4_CONFIG = {
     projectName: 'A4 Godagama – Avissawella widening (feasibility study)',
 
     // Survey stations offered at the start of a shift (any other name can be typed).
+    // From OD_Survey_Locations_Map.kmz.
     surveyLocations: [
-        'Godagama',
-        'Meegoda',
-        'Padukka junction',
-        'Hanwella',
-        'Kosgama',
-        'Avissawella'
+        'OD 1 – A8 near Ingiriya junction (Ratnapura side)',
+        'OD 2 – AB10 near Hanwella junction (west)',
+        'OD 3 – A4 west of Meepe junction',
+        'OD 4 – A4 between Kosgama and Puwakpitiya',
+        'OD 5 – B240 between Padukka and Godagama',
+        'OD 6 – A4 near Godagama junction (east)',
+        'OD 7 – A7 near Talduwa junction (east)'
     ],
 
     // Direction of travel surveyed, offered at the start of a shift and when switching.
