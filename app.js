@@ -111,7 +111,8 @@ const FORM = [
         options: [
             ['Delivery van', 'fa-van-shuttle'],
             ['Small lorry', 'fa-truck-pickup'],
-            ['Truck (2 axle)', 'fa-truck'],
+            ['Medium truck (2 axle)', 'fa-truck'],
+            ['Heavy truck (2 axle)', 'fa-truck-front'],
             ['Container (20 ft / 3 axle)', 'fa-truck-moving'],
             ['Multi-axle container (40 ft)', 'fa-truck-ramp-box']
         ]

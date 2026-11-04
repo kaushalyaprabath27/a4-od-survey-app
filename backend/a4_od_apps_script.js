@@ -281,8 +281,8 @@ const VEHICLE_CLASSES = [
   ["Mini Bus", "Passenger", ["Minibus"]],
   ["Large Bus", "Passenger", ["Large bus"]],
   ["Small Truck", "Freight", ["Delivery van", "Small lorry"]],
-  ["Medium Truck", "Freight", ["Truck (2 axle)"]],
-  ["Heavy Truck", "Freight", ["Container (20 ft / 3 axle)"]],
+  ["Medium Truck", "Freight", ["Medium truck (2 axle)", "Truck (2 axle)"]], // "Truck (2 axle)": records made before the split
+  ["Heavy Truck", "Freight", ["Heavy truck (2 axle)", "Container (20 ft / 3 axle)"]],
   ["Container", "Freight", ["Multi-axle container (40 ft)"]],
   ["Other freight", "Freight", ["Other"]]
 ];

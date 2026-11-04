@@ -22,7 +22,7 @@ One form per vehicle stopped.
 | # | Passenger vehicles | Freight vehicles |
 |---|---|---|
 | 1 | Vehicle category | Vehicle category |
-| 2 | Vehicle type: Motorcycle, 3-wheeler, Taxi, Car / Jeep, Passenger van, Office van, School van, Minibus, Large bus | Vehicle type: Delivery van, Small lorry, Truck (2 axle), Container (20 ft / 3 axle), Multi-axle container (40 ft), Other (type it) |
+| 2 | Vehicle type: Motorcycle, 3-wheeler, Taxi, Car / Jeep, Passenger van, Office van, School van, Minibus, Large bus | Vehicle type: Delivery van, Small lorry, Medium truck (2 axle), Heavy truck (2 axle), Container (20 ft / 3 axle), Multi-axle container (40 ft), Other (type it) |
 | 3 | Occupancy 1–5, or 6+ then the exact number | same |
 | 4 / 4a | Origin village / town + district | same |
 | 5 | Type of origin: Home, Work, School / Education, Business, Health, Shopping / Social, Tourism / Leisure, Other | – |
