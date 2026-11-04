@@ -290,7 +290,7 @@ const VEHICLE_CLASSES = [
 // plan). Change them in the Targets tab or on the dashboard.
 const DEFAULT_TARGETS = {
   "OD 2": { "Motor Cycles": 800, "Three Wheeler": 550, "Car/Jeep/SUV/Double Cab": 525, "Van": 125, "Mini Bus": 25,
-            "Small Truck": 300, "Medium Truck": 400, "Heavy Truck": 75, "Container": 50 }
+            "Small Truck": 300, "Medium Truck": 300, "Heavy Truck": 200, "Container": 50 }
 };
 const STATIONS = ["OD 1", "OD 2", "OD 3", "OD 4", "OD 5", "OD 6", "OD 7"];
 
