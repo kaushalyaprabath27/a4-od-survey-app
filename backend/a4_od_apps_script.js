@@ -416,15 +416,19 @@ function adminStats() {
     const m = /^(\d{1,2})/.exec(time);
     const hour = m ? ("0" + m[1]).slice(-2) : "??";
     const cls = vehicleClass(String(r[col["Vehicle Category"]]).trim(), r[col["Vehicle Type"]]);
+    const dir = String(r[col["Direction"]] || "").trim() || "(no direction)";
+    const name = String(r[col["Recorder"]] || "").trim() || "(no name)";
     add(st, date, "class", cls);
+    add(st, date, "classDir", cls + "|" + dir);
     add(st, date, "hour", hour + "|" + classGroup(cls));
+    add(st, date, "recDir", name + "|" + dir);
+    add(st, date, "recClass", name + "|" + cls);
     ADMIN_FIELDS.forEach(function (f) {
       let v = String(r[col[f[1]]] || "").trim();
       if (!v) return;
       if (/^Other:/.test(v)) v = "Other";
       add(st, date, f[0], v);
     });
-    const name = String(r[col["Recorder"]] || "").trim() || "(no name)";
     add(st, date, "recorder", name);
     const stamp = date + " " + time;
     const rec = recorders[name];
@@ -433,6 +437,8 @@ function adminStats() {
   return {
     status: "success",
     survey: "od",
+    version: 2, // 2: counts by direction and by enumerator
+    directions: ["Towards Colombo", "Towards Avissawella"],
     generated: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss"),
     total: rows.length,
     stations: STATIONS,
