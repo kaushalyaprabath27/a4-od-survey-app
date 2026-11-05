@@ -30,6 +30,9 @@
  * once: Project Settings (gear) > Script properties > Add script property >
  * ADMIN_PASSWORD = the password. It is not written in this file.
  *
+ * OD 4 (Aluthambalama): its interviews go to their own tab, "OD 4 Aluthambalama"
+ * (same columns). The dashboard, Summary and O-D matrix include every tab.
+ *
  * SUMMARY + O-D MATRIX: open the sheet, menu "A4 O-D Survey" > Build / refresh
  * summary. It writes a "Summary" tab (counts per answer and survey date) and
  * an "OD Matrix (District)" tab (origin district x destination district,
@@ -145,12 +148,13 @@ function handleSubmitBatch(data) {
   }
 
   try {
-    const sheet = getDataSheet();
-    // Idempotency: an eventId already in the sheet is skipped (a batch
+    // Idempotency: an eventId already in any data tab is skipped (a batch
     // re-sent after a lost response is not written twice).
-    const existing = getExistingEventIds(sheet);
+    const existing = {};
+    dataTabNames().forEach(function (name) { Object.assign(existing, getExistingEventIds(getDataSheet(name))); });
 
-    const rows = [];
+    const rowsByTab = {};
+    let count = 0;
     let duplicatesSkipped = 0;
     for (let i = 0; i < payload.length; i++) {
       const item = payload[i];
@@ -158,15 +162,18 @@ function handleSubmitBatch(data) {
       const id = item.eventId ? String(item.eventId) : "";
       if (id && existing[id]) { duplicatesSkipped++; continue; }
       if (id) existing[id] = true;
-      rows.push(toRow(item));
+      const tab = tabForStation(normStation(item.surveyLocation));
+      (rowsByTab[tab] = rowsByTab[tab] || []).push(toRow(item));
+      count++;
     }
 
-    if (rows.length) {
-      sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, HEADERS.length).setValues(rows);
-      SpreadsheetApp.flush();
-    }
+    Object.keys(rowsByTab).forEach(function (tab) {
+      const sheet = getDataSheet(tab);
+      sheet.getRange(sheet.getLastRow() + 1, 1, rowsByTab[tab].length, HEADERS.length).setValues(rowsByTab[tab]);
+    });
+    if (count) SpreadsheetApp.flush();
     repairIfDue();
-    return responseJson({ status: "success", count: rows.length, duplicatesSkipped: duplicatesSkipped });
+    return responseJson({ status: "success", count: count, duplicatesSkipped: duplicatesSkipped });
   } finally {
     lock.releaseLock();
   }
@@ -245,13 +252,17 @@ function normDirection(v) {
 // Rows already in the sheet: station names written one way, and load fractions
 // that Sheets turned into dates ("1/2" -> 2 Jan) put back as typed.
 function repairData() {
-  const sheet = getDataSheet();
-  return repairColumn(sheet, "Survey Location", function (v, shown) {
-    const st = normStation(shown);
-    return st !== String(shown).trim() ? st : null;
-  }) + repairColumn(sheet, "Load Condition", function (v, shown) {
-    return v instanceof Date ? "'" + undoDate(shown) : null;
+  let n = 0;
+  dataTabNames().forEach(function (name) {
+    const sheet = getDataSheet(name);
+    n += repairColumn(sheet, "Survey Location", function (v, shown) {
+      const st = normStation(shown);
+      return st !== String(shown).trim() ? st : null;
+    }) + repairColumn(sheet, "Load Condition", function (v, shown) {
+      return v instanceof Date ? "'" + undoDate(shown) : null;
+    });
   });
+  return n;
 }
 
 function num(v) {
@@ -276,24 +287,42 @@ function getSpreadsheet() {
   return ss;
 }
 
-function getDataSheet() {
+function getDataSheet(name) {
+  name = name || DATA_SHEET_NAME;
   const ss = getSpreadsheet();
-  let sheet = ss.getSheetByName(DATA_SHEET_NAME);
+  let sheet = ss.getSheetByName(name);
   if (sheet && !hasCurrentHeaders(sheet)) {
     if (sheet.getLastRow() <= 1) {
       sheet.clear();
     } else {
       // Rows in an older column layout: keep them untouched under a new name.
-      sheet.setName(DATA_SHEET_NAME + " (old " + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HHmm") + ")");
+      sheet.setName(name + " (old " + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HHmm") + ")");
       sheet = null;
     }
   }
-  if (!sheet) sheet = ss.insertSheet(DATA_SHEET_NAME);
+  if (!sheet) sheet = ss.insertSheet(name);
   if (sheet.getLastRow() === 0) {
     sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]).setFontWeight("bold");
     sheet.setFrozenRows(1);
   }
   return sheet;
+}
+
+// Stations whose records go to their own tab (same columns as the main tab).
+const STATION_TABS = { "OD 4": "OD 4 Aluthambalama" };
+function tabForStation(station) { return STATION_TABS[String(station || "").trim()] || DATA_SHEET_NAME; }
+function dataTabNames() {
+  return [DATA_SHEET_NAME].concat(Object.keys(STATION_TABS).map(function (k) { return STATION_TABS[k]; }));
+}
+// Every record (shown values), from the main tab and the station tabs.
+function readAllRows() {
+  let rows = [];
+  dataTabNames().forEach(function (name) {
+    const sheet = getDataSheet(name);
+    const last = sheet.getLastRow();
+    if (last > 1) rows = rows.concat(sheet.getRange(2, 1, last - 1, HEADERS.length).getDisplayValues());
+  });
+  return rows;
 }
 
 function hasCurrentHeaders(sheet) {
@@ -466,9 +495,7 @@ function saveTargets(targets) {
 // Counts for the dashboard as [station, date, what, value, n] rows; the page
 // adds them up for the station and date picked.
 function adminStats() {
-  const sheet = getDataSheet();
-  const last = sheet.getLastRow();
-  const rows = last > 1 ? sheet.getRange(2, 1, last - 1, HEADERS.length).getDisplayValues() : [];
+  const rows = readAllRows();
   const col = {};
   HEADERS.forEach(function (h, i) { col[h] = i; });
   const agg = {};
@@ -523,6 +550,7 @@ function adminStats() {
 // the permissions the web app needs.
 function setup() {
   const sheet = getDataSheet();
+  dataTabNames().forEach(function (name) { getDataSheet(name); });
   getTargetsSheet();
   repairData();
   Logger.log("Data sheet ready: " + sheet.getParent().getUrl());
@@ -541,7 +569,7 @@ function onOpen() {
 
 function buildSummary() {
   const ss = getSpreadsheet();
-  const data = getDataSheet().getDataRange().getDisplayValues();
+  const data = [HEADERS].concat(readAllRows());
   const col = {};
   HEADERS.forEach(function (h, i) { col[h] = i; });
 
