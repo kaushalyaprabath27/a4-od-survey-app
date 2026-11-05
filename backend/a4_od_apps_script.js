@@ -165,6 +165,7 @@ function handleSubmitBatch(data) {
       sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, HEADERS.length).setValues(rows);
       SpreadsheetApp.flush();
     }
+    repairIfDue();
     return responseJson({ status: "success", count: rows.length, duplicatesSkipped: duplicatesSkipped });
   } finally {
     lock.releaseLock();
@@ -173,7 +174,7 @@ function handleSubmitBatch(data) {
 
 function toRow(item) {
   return COLUMNS.map(function (c) {
-    const v = item[c[1]];
+    const v = c[1] === "surveyLocation" ? normStation(item[c[1]]) : item[c[1]];
     if (c[2] === "num") return num(v);
     if (c[2] === "numtext") return v !== "" && v !== null && v !== undefined && isFinite(Number(v)) ? Number(v) : text(v, 300);
     return text(v, c[2] === "long" ? 2000 : 300);
@@ -186,7 +187,71 @@ function text(v, maxLen) {
   if (v === undefined || v === null) return "";
   let s = String(v).trim().slice(0, maxLen || 300);
   if (/^[=+\-@]/.test(s)) s = "'" + s;
+  // Keep "3/1", "1/2" or "2026-11-04" as typed (Sheets would make them dates).
+  else if (/^\d+(\s*[\/.\-]\s*\d+)+$/.test(s)) s = "'" + s;
   return s;
+}
+
+// What was typed before Sheets made it a date: "3/1/2026" -> "3/1", "2026-03-01" -> "3/1".
+// Anything else is returned unchanged.
+function undoDate(shown) {
+  const s = String(shown === undefined || shown === null ? "" : shown).trim();
+  let m = /^(\d{1,2})[\/.\-](\d{1,2})[\/.\-]\d{4}$/.exec(s);
+  if (m) return Number(m[1]) + "/" + Number(m[2]);
+  m = /^\d{4}-(\d{1,2})-(\d{1,2})$/.exec(s);
+  if (m) return Number(m[1]) + "/" + Number(m[2]);
+  return s;
+}
+
+// Rewrite single cells of one column: fix(value, shown) returns the new value, or null to keep it.
+function repairColumn(sheet, header, fix) {
+  const c = HEADERS.indexOf(header) + 1;
+  const last = sheet.getLastRow();
+  if (c < 1 || last < 2) return 0;
+  const range = sheet.getRange(2, c, last - 1, 1);
+  const values = range.getValues(), shown = range.getDisplayValues();
+  let n = 0;
+  for (let i = 0; i < values.length; i++) {
+    const v = fix(values[i][0], shown[i][0]);
+    if (v === null) continue;
+    sheet.getRange(i + 2, c).setValue(v);
+    n++;
+  }
+  return n;
+}
+
+// The clean-up runs by itself after an update (with the next records), at most every 6 hours.
+function repairIfDue() {
+  const cache = CacheService.getScriptCache();
+  if (cache.get("repaired")) return;
+  repairData();
+  cache.put("repaired", "1", 21600);
+}
+
+// "od2", "OD 02", "Od-6" -> "OD 2", "OD 6": one name per station.
+function normStation(v) {
+  const s = String(v === undefined || v === null ? "" : v).trim();
+  const m = /^od\s*[-_.]?\s*0*(\d+)$/i.exec(s);
+  return m ? "OD " + m[1] : s;
+}
+// Older app versions wrote "Towards Colombo / Godagama".
+function normDirection(v) {
+  const s = String(v || "").trim();
+  if (/^towards colombo/i.test(s)) return "Towards Colombo";
+  if (/^towards avissawella/i.test(s)) return "Towards Avissawella";
+  return s;
+}
+
+// Rows already in the sheet: station names written one way, and load fractions
+// that Sheets turned into dates ("1/2" -> 2 Jan) put back as typed.
+function repairData() {
+  const sheet = getDataSheet();
+  return repairColumn(sheet, "Survey Location", function (v, shown) {
+    const st = normStation(shown);
+    return st !== String(shown).trim() ? st : null;
+  }) + repairColumn(sheet, "Load Condition", function (v, shown) {
+    return v instanceof Date ? "'" + undoDate(shown) : null;
+  });
 }
 
 function num(v) {
@@ -286,11 +351,14 @@ const VEHICLE_CLASSES = [
   ["Container", "Freight", ["Multi-axle container (40 ft)"]],
   ["Other freight", "Freight", ["Other"]]
 ];
-// Targets filled in when the Targets tab is first made (OD 2 from the sampling
-// plan). Change them in the Targets tab or on the dashboard.
+// Targets filled in when the Targets tab is first made (OD 2 and OD 4 from the
+// sampling plan; hours = survey hours per day, 12 if not given). Change them
+// in the Targets tab or on the dashboard.
 const DEFAULT_TARGETS = {
   "OD 2": { "Motor Cycles": 800, "Three Wheeler": 550, "Car/Jeep/SUV/Double Cab": 525, "Van": 125, "Mini Bus": 25,
-            "Small Truck": 300, "Medium Truck": 300, "Heavy Truck": 200, "Container": 50 }
+            "Small Truck": 300, "Medium Truck": 300, "Heavy Truck": 200, "Container": 50 },
+  "OD 4": { hours: 9, "Motor Cycles": 700, "Three Wheeler": 550, "Car/Jeep/SUV/Double Cab": 650, "Van": 125, "Mini Bus": 25,
+            "Small Truck": 200, "Medium Truck": 150, "Heavy Truck": 150, "Container": 10 }
 };
 const STATIONS = ["OD 1", "OD 2", "OD 3", "OD 4", "OD 5", "OD 6", "OD 7"];
 
@@ -348,7 +416,7 @@ function getTargetsSheet() {
   const head = ["Station", "Survey hours"].concat(VEHICLE_CLASSES.map(function (c) { return c[0]; }));
   const rows = STATIONS.map(function (st) {
     const t = DEFAULT_TARGETS[st] || {};
-    return [st, SURVEY_HOURS_DEFAULT].concat(VEHICLE_CLASSES.map(function (c) { return t[c[0]] === undefined ? "" : t[c[0]]; }));
+    return [st, t.hours || SURVEY_HOURS_DEFAULT].concat(VEHICLE_CLASSES.map(function (c) { return t[c[0]] === undefined ? "" : t[c[0]]; }));
   });
   sheet.getRange(1, 1, 1, head.length).setValues([head]).setFontWeight("bold");
   sheet.getRange(2, 1, rows.length, head.length).setValues(rows);
@@ -410,13 +478,13 @@ function adminStats() {
   };
   const recorders = {};
   rows.forEach(function (r) {
-    const st = String(r[col["Survey Location"]] || "").trim() || "(no station)";
+    const st = normStation(r[col["Survey Location"]]) || "(no station)";
     const date = String(r[col["Date"]] || "").trim() || "(no date)";
     const time = String(r[col["Time"]] || "").trim();
     const m = /^(\d{1,2})/.exec(time);
     const hour = m ? ("0" + m[1]).slice(-2) : "??";
     const cls = vehicleClass(String(r[col["Vehicle Category"]]).trim(), r[col["Vehicle Type"]]);
-    const dir = String(r[col["Direction"]] || "").trim() || "(no direction)";
+    const dir = normDirection(r[col["Direction"]]) || "(no direction)";
     const name = String(r[col["Recorder"]] || "").trim() || "(no name)";
     add(st, date, "class", cls);
     add(st, date, "classDir", cls + "|" + dir);
@@ -425,6 +493,8 @@ function adminStats() {
     add(st, date, "recClass", name + "|" + cls);
     ADMIN_FIELDS.forEach(function (f) {
       let v = String(r[col[f[1]]] || "").trim();
+      if (f[0] === "direction") v = normDirection(v);
+      if (f[0] === "load") v = undoDate(v);
       if (!v) return;
       if (/^Other:/.test(v)) v = "Other";
       add(st, date, f[0], v);
@@ -454,6 +524,7 @@ function adminStats() {
 function setup() {
   const sheet = getDataSheet();
   getTargetsSheet();
+  repairData();
   Logger.log("Data sheet ready: " + sheet.getParent().getUrl());
 }
 
@@ -464,6 +535,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("A4 O-D Survey")
     .addItem("Build / refresh summary", "buildSummary")
+    .addItem("Clean station names and load fractions", "repairData")
     .addToUi();
 }
 

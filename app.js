@@ -348,6 +348,11 @@ $('theme-toggle').addEventListener('click', () => {
 // ---------------------------------------------------------------------
 const inputName = $('surveyor-name');
 const inputLocation = $('survey-location');
+// "od2", "OD 02", "Od-6" -> "OD 2", "OD 6": one name per station.
+function normStation(v) {
+    const m = /^od\s*[-_.]?\s*0*(\d+)$/i.exec(String(v || '').trim());
+    return m ? `OD ${m[1]}` : String(v || '').trim();
+}
 const inputDirection = $('survey-direction');
 const btnStart = $('btn-start');
 
@@ -383,7 +388,7 @@ function checkSetupForm() {
 btnStart.addEventListener('click', () => {
     if (btnStart.disabled) return;
     session = {
-        id: generateId(), active: true, name: inputName.value.trim(), location: inputLocation.value.trim(),
+        id: generateId(), active: true, name: inputName.value.trim(), location: normStation(inputLocation.value),
         direction: inputDirection.value.trim(), startedAt: Date.now()
     };
     saveSession();
@@ -1223,7 +1228,7 @@ function buildRecord(fix, interviewId, ts) {
         sessionId: session.id,
         interviewId,
         name: session.name,
-        surveyLocation: session.location,
+        surveyLocation: normStation(session.location),
         direction: session.direction,
         shiftStart: session.startedAt ? `${formatDate(session.startedAt)} ${formatTime(session.startedAt).slice(0, 5)}` : '',
         date: formatDate(now),
