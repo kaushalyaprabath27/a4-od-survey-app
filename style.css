@@ -654,3 +654,6 @@ body.route-full-open .theme-btn, body.route-full-open .topbar, body.route-full-o
 .amount-unit { font-weight: 700; color: var(--text-secondary); }
 .amount input { flex: 1 1 160px; min-width: 0; }
 .amount .amount-nk { flex: 0 0 auto; }
+.plate .plate-prefix { flex: 1 1 110px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+.plate .plate-number { flex: 1 1 90px; letter-spacing: 0.08em; font-weight: 600; }
+.plate .plate-sri, .plate .amount-nk { flex: 0 0 auto; }

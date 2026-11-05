@@ -26,9 +26,9 @@ const CONFIG = Object.assign({
 
 const PLACEHOLDER_URL = 'YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE';
 const SURVEY_TYPE = 'a4-roadside-od';
-// v3: commodity groups + details, load amount + unit. v2: district only (no DSD),
+// v4: vehicle number (two parts). v3: commodity groups + details, load amount + unit. v2: district only (no DSD),
 // no parking / ownership; trip purpose, 6+ count, owner income, commodity value.
-const SYNC_ACTION = 'submit_a4od_v3';
+const SYNC_ACTION = 'submit_a4od_v4';
 const BATCH_SIZE = 50;
 const SYNC_INTERVAL_MS = 15000;
 
@@ -49,6 +49,7 @@ const THEME_KEY = 'a4od_theme';
 //            recent: true also offers places used before on this phone
 //            cities: true = Sri Lankan cities and towns first
 //   district - district picked from the list (or 'Not known')
+//   plate  - vehicle number in two parts: letters / Sri / old number, then the number
 //   amount - a number (rupees by default), or 'Not known'
 //            decimals: true allows 2.5;  units: [...] asks for the unit too
 //            (unitOther: true adds 'Other' with a text box)
@@ -205,6 +206,10 @@ const FORM = [
         units: ['tonnes', 'kg', 'bags', 'units', 'litres', 'cubes'], unitOther: true,
         showIf: a => isFreight(a) && a.load !== 'Empty' && a.commodity !== 'Empty',
         hint: 'Amount and unit, e.g. 2.5 tonnes or 40 bags', placeholder: 'e.g. 2.5'
+    },
+    {
+        id: 'vehicleNo', section: 'Vehicle number', label: 'Vehicle number (number plate)', type: 'plate',
+        hint: 'Two parts: letters (ABC), Sri or the old number (200), then the number (1234)'
     }
 ];
 
@@ -569,6 +574,7 @@ function buildForm() {
         if (f.type === 'place') buildPlaceField(q, f);
         else if (f.type === 'district') buildDistrictField(q, f);
         else if (f.type === 'amount') buildAmountField(q, f);
+        else if (f.type === 'plate') buildPlateField(q, f);
         else buildChoiceField(q, f);
         formEl.appendChild(q);
     });
@@ -585,6 +591,7 @@ function isAnswered(f) {
         if (!f.units) return true;
         return !!v.unit && (v.unit !== 'Other' || !!(v.unitOther || '').trim());
     }
+    if (f.type === 'plate') return !!(v && (v.unknown || ((v.prefix || '').trim() && /^\d{1,4}$/.test(v.number || ''))));
     if (f.type === 'multi') return Array.isArray(v) && v.length > 0;
     if (!(v && String(v).trim())) return false;
     // "Other" needs its text, and e.g. '6+' needs the exact number.
@@ -1095,6 +1102,84 @@ function buildAmountField(q, f) {
     };
 }
 
+// ----- Vehicle number: first part (ABC, WP CAB, Sri, 19 Sri, 200) + the number (1234) -----
+const PLATE_NOT_NOTED = 'Not noted';
+function cleanPlatePrefix(t) {
+    // Letters, digits, spaces and Sinhala (ශ්‍රී); "sri" in any case is written "SRI".
+    return String(t || '').toUpperCase().replace(/[^A-Z0-9 \u0D80-\u0DFF\u200D]/g, '').replace(/\s+/g, ' ').replace(/^\s/, '').slice(0, 10);
+}
+function buildPlateField(q, f) {
+    const wrap = el('div', 'amount plate');
+    const pre = el('input', 'plate-prefix');
+    pre.type = 'text';
+    pre.autocapitalize = 'characters';
+    pre.placeholder = 'ABC / SRI / 200';
+    pre.setAttribute('aria-label', 'Vehicle number: first part (letters, Sri or old number)');
+    const num = el('input', 'plate-number');
+    num.type = 'text';
+    num.inputMode = 'numeric';
+    num.placeholder = '1234';
+    num.setAttribute('aria-label', 'Vehicle number: the number');
+    const sri = el('button', 'chip-opt plate-sri', '<span>ශ්‍රී SRI</span>');
+    sri.type = 'button';
+    sri.title = 'Old plate with ශ්‍රී';
+    const nk = el('button', 'chip-opt amount-nk', `<i class="fa-solid fa-circle-question"></i><span>${PLATE_NOT_NOTED}</span>`);
+    nk.type = 'button';
+    wrap.append(pre, el('span', 'amount-unit plate-dash', '–'), num, sri, nk);
+    const status = el('div', 'place-status');
+    q.append(wrap, status);
+    const set = patch => { answers[f.id] = Object.assign({ prefix: '', number: '' }, answers[f.id] || {}, patch, { unknown: false }); changed(); setStatus(); };
+    const setStatus = () => {
+        const v = answers[f.id] || {};
+        if (v.unknown) { status.textContent = '✓ ' + PLATE_NOT_NOTED; status.className = 'place-status ok'; }
+        else if (isAnswered(f)) { status.textContent = `✓ ${v.prefix.trim()} – ${v.number}`; status.className = 'place-status ok'; }
+        else if (v.prefix || v.number) { status.textContent = v.number ? 'Type the first part (ABC, SRI or 200)' : 'Type the number'; status.className = 'place-status warn'; }
+        else { status.textContent = ''; status.className = 'place-status'; }
+    };
+    pre.addEventListener('input', () => {
+        const c = cleanPlatePrefix(pre.value);
+        if (c !== pre.value) pre.value = c;
+        nk.classList.remove('selected');
+        set({ prefix: c });
+    });
+    pre.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); num.focus(); } });
+    num.addEventListener('input', () => {
+        const d = num.value.replace(/\D/g, '').slice(0, 4);
+        if (d !== num.value) num.value = d;
+        nk.classList.remove('selected');
+        set({ number: d });
+    });
+    sri.addEventListener('click', () => {
+        const v = answers[f.id] || {};
+        // "19 SRI" when an old number is typed first, otherwise "SRI".
+        const head = (v.unknown ? '' : (v.prefix || '')).replace(/\s*SRI$/, '').trim();
+        const prefix = /^\d+$/.test(head) ? `${head} SRI` : 'SRI';
+        set({ prefix });
+        renderers[f.id]();
+        setTimeout(() => num.focus(), 50);
+    });
+    nk.addEventListener('click', () => {
+        const on = !(answers[f.id] && answers[f.id].unknown);
+        answers[f.id] = on ? { prefix: '', number: '', unknown: true } : null;
+        renderers[f.id]();
+        changed();
+    });
+    renderers[f.id] = () => {
+        const v = answers[f.id] || {};
+        if (document.activeElement !== pre) pre.value = v.prefix || '';
+        if (document.activeElement !== num) num.value = v.number || '';
+        nk.classList.toggle('selected', !!v.unknown);
+        nk.setAttribute('aria-pressed', String(!!v.unknown));
+        setStatus();
+    };
+}
+function plateValue(id, part) {
+    if (!shown(id)) return '';
+    const v = answers[id] || {};
+    if (v.unknown) return part === 'prefix' ? PLATE_NOT_NOTED : '';
+    return part === 'prefix' ? (v.prefix || '').trim() : (v.number || '');
+}
+
 // ---------------------------------------------------------------------
 // Place suggestion providers
 // ---------------------------------------------------------------------
@@ -1262,7 +1347,9 @@ function buildRecord(fix, interviewId, ts) {
         income: singleValue('income'),
         commodityValue: amountValue('commodityValue'),
         loadQty: amountValue('loadQty'),
-        loadUnit: amountUnit('loadQty')
+        loadUnit: amountUnit('loadQty'),
+        vehicleNoPrefix: plateValue('vehicleNo', 'prefix'),
+        vehicleNoNumber: plateValue('vehicleNo', 'number')
     };
 }
 

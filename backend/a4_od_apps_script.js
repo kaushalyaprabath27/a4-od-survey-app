@@ -82,7 +82,10 @@ const COLUMNS = [
   ["Commodity Value (Rs.)", "commodityValue", "numtext"],
   ["Approx. Load", "loadQty", "numtext"],
   ["Load Unit", "loadUnit", "text"],
-  ["EventID", "eventId", "text"]
+  ["EventID", "eventId", "text"],
+  // Added after EventID so older tabs only gain two columns (nothing moves).
+  ["Vehicle No. (Letters / Sri)", "vehicleNoPrefix", "keep"],
+  ["Vehicle No. (Number)", "vehicleNoNumber", "keep"]
 ];
 const HEADERS = COLUMNS.map(function (c) { return c[0]; });
 const EVENT_ID_COL = HEADERS.indexOf("EventID") + 1; // 1-based
@@ -119,9 +122,9 @@ function handleRequest(e) {
     for (const key in params) data[key] = params[key];
 
     const action = data.action;
-    // v3 = current app (commodity groups + details, load amount + unit).
-    // v1 / v2 records are still accepted; their retired fields are ignored.
-    if (/^submit_a4od_v[1-3]$/.test(action || "")) return handleSubmitBatch(data);
+    // v4 = current app (vehicle number). v1 - v3 records are still accepted;
+    // retired fields are ignored and new ones left blank.
+    if (/^submit_a4od_v[1-4]$/.test(action || "")) return handleSubmitBatch(data);
     if (action === "admin_stats" || action === "admin_set_targets") return handleAdmin(data);
     if (!action) return responseJson({ status: "success", message: "A4 roadside O-D survey backend is running." });
     return responseJson({ status: "error", message: "Invalid action" });
@@ -184,6 +187,7 @@ function toRow(item) {
     const v = c[1] === "surveyLocation" ? normStation(item[c[1]]) : item[c[1]];
     if (c[2] === "num") return num(v);
     if (c[2] === "numtext") return v !== "" && v !== null && v !== undefined && isFinite(Number(v)) ? Number(v) : text(v, 300);
+    if (c[2] === "keep") { const t = text(v, 40); return /^\d+$/.test(t) ? "'" + t : t; } // 0123 keeps its 0
     return text(v, c[2] === "long" ? 2000 : 300);
   });
 }
@@ -291,6 +295,7 @@ function getDataSheet(name) {
   name = name || DATA_SHEET_NAME;
   const ss = getSpreadsheet();
   let sheet = ss.getSheetByName(name);
+  if (sheet && !hasCurrentHeaders(sheet)) extendHeaders(sheet);
   if (sheet && !hasCurrentHeaders(sheet)) {
     if (sheet.getLastRow() <= 1) {
       sheet.clear();
@@ -323,6 +328,17 @@ function readAllRows() {
     if (last > 1) rows = rows.concat(sheet.getRange(2, 1, last - 1, HEADERS.length).getDisplayValues());
   });
   return rows;
+}
+
+// A tab whose header row is the start of HEADERS (made before the last columns
+// were added) just gets the new header cells; its rows stay where they are.
+function extendHeaders(sheet) {
+  const n = sheet.getLastColumn();
+  if (sheet.getLastRow() === 0 || n >= HEADERS.length) return false;
+  const row = sheet.getRange(1, 1, 1, n).getValues()[0];
+  if (!row.every(function (v, i) { return String(v) === HEADERS[i]; })) return false;
+  sheet.getRange(1, n + 1, 1, HEADERS.length - n).setValues([HEADERS.slice(n)]).setFontWeight("bold");
+  return true;
 }
 
 function hasCurrentHeaders(sheet) {

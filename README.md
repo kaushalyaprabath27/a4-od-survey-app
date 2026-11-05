@@ -31,6 +31,7 @@ One form per vehicle stopped.
 | | Trip purpose | Commodity: Empty, Vegetables / Fruits, Essential food items, Building materials, Industrial products, Other — with the goods typed in (e.g. potatoes); load: Empty, 1/4, 1/2, 3/4, Full, Overloaded |
 | | In future, would you use the Kahathuduwa – Ingiriya Expressway on this route? Yes / No / Not sure | same |
 | last | **Value of time:** is the respondent the vehicle owner? If yes, monthly household income (8 bands from < Rs. 30,000 to > Rs. 500,000, or prefer not to say) | **Value of time:** approximate value of the goods carried (Rs.) and approximate load with its unit (tonnes, kg, bags, units, litres, cubes, other), each with Not known; not asked for empty vehicles |
+| last | **Vehicle number** in two parts: letters (ABC), SRI or the old number (200, 19 SRI), then the number (1234); or Not noted | same |
 
 Question numbers follow the questions shown, so each form is numbered 1, 2, 3 …
 An "Other" answer counts only once its text is typed.
