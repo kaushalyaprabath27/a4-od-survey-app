@@ -396,10 +396,14 @@ const VEHICLE_CLASSES = [
   ["Container", "Freight", ["Multi-axle container (40 ft)"]],
   ["Other freight", "Freight", ["Other"]]
 ];
-// Targets filled in when the Targets tab is first made (OD 2 and OD 4 from the
-// sampling plan; hours = survey hours per day, 12 if not given). Change them
+// Targets filled in when the Targets tab is first made (OD 1, OD 2 and OD 4 from
+// the sampling plan; hours = survey hours per day, 12 if not given). Change them
 // in the Targets tab or on the dashboard.
+// OD 1 (A008 near Ingiriya): Light truck -> Small Truck; Medium truck -> Medium Truck;
+// Large truck 60 + Heavy vehicle 8 + 20 ft container 1 -> Heavy Truck 69; 40 ft -> Container.
 const DEFAULT_TARGETS = {
+  "OD 1": { hours: 6, "Motor Cycles": 500, "Three Wheeler": 240, "Car/Jeep/SUV/Double Cab": 360, "Van": 70, "Mini Bus": 6,
+            "Small Truck": 90, "Medium Truck": 80, "Heavy Truck": 69, "Container": 1 },
   "OD 2": { "Motor Cycles": 800, "Three Wheeler": 550, "Car/Jeep/SUV/Double Cab": 525, "Van": 125, "Mini Bus": 25,
             "Small Truck": 300, "Medium Truck": 300, "Heavy Truck": 200, "Container": 50 },
   "OD 4": { hours: 9, "Motor Cycles": 700, "Three Wheeler": 550, "Car/Jeep/SUV/Double Cab": 650, "Van": 125, "Mini Bus": 25,
