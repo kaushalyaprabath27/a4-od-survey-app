@@ -40,10 +40,22 @@ async function call(survey, body) {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     return res.json();
 }
+// "Towards Avissawella" is now "Towards Rathnapura": rename it in what the backend sends
+// (older script versions, and interviews saved before the change) so both count as one.
+const renameDir = v => String(v).replace(/^Towards Avissawella/i, 'Towards Rathnapura');
+function renameDirections(r) {
+    if (Array.isArray(r.directions)) r.directions = [...new Set(r.directions.map(renameDir))];
+    if (Array.isArray(r.counts)) r.counts.forEach(c => {
+        if (c[2] === 'direction') c[3] = renameDir(c[3]);
+        else if (c[2] === 'classDir' || c[2] === 'recDir') c[3] = String(c[3]).replace(/\|Towards Avissawella$/i, '|Towards Rathnapura');
+    });
+    return r;
+}
+
 async function fetchSurvey(survey, body) {
     try {
         const r = await call(survey, body || { action: 'admin_stats' });
-        if (r.status === 'success') { data[survey.id] = r; delete errors[survey.id]; return true; }
+        if (r.status === 'success') { data[survey.id] = survey.id === 'od' ? renameDirections(r) : r; delete errors[survey.id]; return true; }
         errors[survey.id] = r.message || 'Error';
         if (r.auth === false) return false;
     } catch (e) {
