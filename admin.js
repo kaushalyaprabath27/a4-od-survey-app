@@ -47,7 +47,7 @@ function renameDirections(r) {
     if (Array.isArray(r.directions)) r.directions = [...new Set(r.directions.map(renameDir))];
     if (Array.isArray(r.counts)) r.counts.forEach(c => {
         if (c[2] === 'direction') c[3] = renameDir(c[3]);
-        else if (c[2] === 'classDir' || c[2] === 'recDir') c[3] = String(c[3]).replace(/\|Towards Avissawella$/i, '|Towards Rathnapura');
+        else if (c[2] === 'classDir' || c[2] === 'recDir' || c[2] === 'typeDir') c[3] = String(c[3]).replace(/\|Towards Avissawella$/i, '|Towards Rathnapura');
     });
     return r;
 }
@@ -188,6 +188,13 @@ function recordersCard(d, noun) {
 // ---------------------------------------------------------------------
 // Vehicle O-D: progress against targets (as in the sampling plan) + answers
 // ---------------------------------------------------------------------
+// Vehicle types as the enumerators record them in the app (shown under their class even before any interview).
+const APP_TYPES = [
+    'Motorcycle', '3-wheeler', 'Taxi', 'Car / Jeep', 'Passenger van', 'Office van', 'School van', 'Minibus', 'Large bus',
+    'Delivery van', 'Light truck (2 axles / 4 wheels)', 'Medium truck (2 axles / 6 wheels)', 'Large truck (2 axles / 6 wheels)',
+    'Heavy vehicle (3 axles / 10 wheels)', 'Container with trailer', 'Other'
+];
+
 function odTargets(d) {
     // Sum of the targets of the selected station(s): per class, per group, and per hour per group.
     const sts = state.station === 'all' ? Object.keys(d.targets || {}) : [state.station];
@@ -221,6 +228,9 @@ function odView(d) {
     const DIRS = d.directions || ['Towards Colombo', 'Towards Rathnapura'];
     const hasDir = d.version >= 2;
     const byDir = tally(d, 'classDir'); // "class|direction" -> n
+    const byType = tally(d, 'type');       // recorded vehicle type -> n
+    const hasTypeDir = d.version >= 3;
+    const byTypeDir = tally(d, 'typeDir'); // "type|direction" -> n
     const dirDone = (cls, i) => byDir.get(`${cls}|${DIRS[i]}`) || 0;
     const half = (target, i) => i === 0 ? Math.ceil(target / 2) : Math.floor(target / 2);
     // Still needed: each direction up to its half (more in one direction does not make up for the other).
@@ -251,6 +261,15 @@ function odView(d) {
     const dirCells = (list, target) => hasDir
         ? DIRS.map((dir, i) => dirCell(sum(list, c => dirDone(c.name, i)), sum(list, c => half(target(c), i)))).join('')
         : '';
+    // Each vehicle type recorded in the app, under the class it counts in.
+    const typeRows = c => c.types
+        .filter(ty => APP_TYPES.includes(ty) || (byType.get(ty) || 0) > 0)
+        .map(ty => {
+            const n = byType.get(ty) || 0;
+            const old = APP_TYPES.includes(ty) ? '' : ' <span class="muted small">(earlier form)</span>';
+            const dcells = hasDir ? DIRS.map(dir => `<td class="num">${hasTypeDir ? fmt(byTypeDir.get(`${ty}|${dir}`) || 0) : '<span class="muted">·</span>'}</td>`).join('') : '';
+            return `<tr class="sub"><td>${esc(ty)}${old}</td><td></td><td class="num">${fmt(n)}</td>${dcells}<td></td><td></td></tr>`;
+        }).join('');
     const groups = ['Passenger', 'Freight'];
     let rows = '';
     groups.forEach(g => {
@@ -259,7 +278,8 @@ function odView(d) {
             const n = done.get(c.name) || 0, target = t.byClass[c.name] || 0;
             const tcell = editing ? `<input type="number" min="0" step="1" data-class="${esc(c.name)}" value="${tg && tg.byClass[c.name] !== undefined ? tg.byClass[c.name] : ''}" aria-label="Target ${esc(c.name)}">` : (target ? fmt(target) : '–');
             const rem = remainingOf(c.name, target);
-            rows += `<tr><td>${esc(c.name)}</td><td class="num">${tcell}</td><td class="num">${fmt(n)}</td>${dirCells([c], x => t.byClass[x.name] || 0)}<td class="num">${target ? fmt(rem) : '–'}</td><td>${progress(target - rem, target)}</td></tr>`;
+            rows += `<tr class="cls"><td>${esc(c.name)}</td><td class="num">${tcell}</td><td class="num">${fmt(n)}</td>${dirCells([c], x => t.byClass[x.name] || 0)}<td class="num">${target ? fmt(rem) : '–'}</td><td>${progress(target - rem, target)}</td></tr>`;
+            rows += typeRows(c);
         });
         const gDone = sum(cls, c => done.get(c.name) || 0);
         const gT = t.group[g] || 0;
@@ -283,7 +303,7 @@ function odView(d) {
     const dirHead = hasDir ? DIRS.map(x => `<th class="num">${esc(x)}<br><span class="small">surveyed / needed</span></th>`).join('') : '';
     html += `<section class="card wide"><h2><i class="fa-solid fa-bullseye"></i> Progress: ${esc(station)}<span class="spacer"></span>${editBtn}</h2>
         <div class="table-wrap"><table><tr><th>Type of vehicle</th><th class="num">Total to be surveyed</th><th class="num">Surveyed</th>${dirHead}<th class="num">Still needed</th><th>Progress</th></tr>${rows}</table></div>
-        <p class="muted small card-note">${hasDir ? 'Half of each target is needed towards Colombo and half towards Rathnapura; extra interviews in one direction do not count for the other.' : 'Update the Apps Script to see the counts by direction.'}</p>
+        <p class="muted small card-note">${hasDir ? 'Half of each target is needed towards Colombo and half towards Rathnapura; extra interviews in one direction do not count for the other.' : 'Update the Apps Script to see the counts by direction.'} The indented rows are the vehicle types as recorded in the app${hasDir && !hasTypeDir ? ' (update the Apps Script to see each type by direction)' : ''}.</p>
         <details class="map card-note"><summary class="small">Which app vehicle types count in each class</summary><ul class="small">${mapping}</ul></details></section>`;
 
     // Per hour

@@ -541,6 +541,8 @@ function adminStats() {
     const name = String(r[col["Recorder"]] || "").trim() || "(no name)";
     add(st, date, "class", cls);
     add(st, date, "classDir", cls + "|" + dir);
+    const type = String(r[col["Vehicle Type"]] || "").trim().replace(/^Other:.*$/, "Other") || "(no type)";
+    add(st, date, "typeDir", type + "|" + dir);
     add(st, date, "hour", hour + "|" + classGroup(cls));
     add(st, date, "recDir", name + "|" + dir);
     add(st, date, "recClass", name + "|" + cls);
@@ -560,7 +562,7 @@ function adminStats() {
   return {
     status: "success",
     survey: "od",
-    version: 2, // 2: counts by direction and by enumerator
+    version: 3, // 2: counts by direction and by enumerator; 3: each recorded vehicle type by direction
     directions: ["Towards Colombo", "Towards Rathnapura"],
     generated: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss"),
     total: rows.length,
