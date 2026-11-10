@@ -205,8 +205,8 @@ function odView(d) {
     const singleStation = state.station !== 'all';
     const tg = singleStation ? (d.targets[state.station] || { hours: 12, byClass: {} }) : null;
 
-    // Half of each target towards Colombo, half towards Avissawella.
-    const DIRS = d.directions || ['Towards Colombo', 'Towards Avissawella'];
+    // Half of each target towards Colombo, half towards Rathnapura.
+    const DIRS = d.directions || ['Towards Colombo', 'Towards Rathnapura'];
     const hasDir = d.version >= 2;
     const byDir = tally(d, 'classDir'); // "class|direction" -> n
     const dirDone = (cls, i) => byDir.get(`${cls}|${DIRS[i]}`) || 0;
@@ -271,7 +271,7 @@ function odView(d) {
     const dirHead = hasDir ? DIRS.map(x => `<th class="num">${esc(x)}<br><span class="small">surveyed / needed</span></th>`).join('') : '';
     html += `<section class="card wide"><h2><i class="fa-solid fa-bullseye"></i> Progress: ${esc(station)}<span class="spacer"></span>${editBtn}</h2>
         <div class="table-wrap"><table><tr><th>Type of vehicle</th><th class="num">Total to be surveyed</th><th class="num">Surveyed</th>${dirHead}<th class="num">Still needed</th><th>Progress</th></tr>${rows}</table></div>
-        <p class="muted small card-note">${hasDir ? 'Half of each target is needed towards Colombo and half towards Avissawella; extra interviews in one direction do not count for the other.' : 'Update the Apps Script to see the counts by direction.'}</p>
+        <p class="muted small card-note">${hasDir ? 'Half of each target is needed towards Colombo and half towards Rathnapura; extra interviews in one direction do not count for the other.' : 'Update the Apps Script to see the counts by direction.'}</p>
         <details class="map card-note"><summary class="small">Which app vehicle types count in each class</summary><ul class="small">${mapping}</ul></details></section>`;
 
     // Per hour

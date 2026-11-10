@@ -222,21 +222,23 @@ function repairColumn(sheet, header, fix) {
   const range = sheet.getRange(2, c, last - 1, 1);
   const values = range.getValues(), shown = range.getDisplayValues();
   let n = 0;
-  for (let i = 0; i < values.length; i++) {
-    const v = fix(values[i][0], shown[i][0]);
-    if (v === null) continue;
-    sheet.getRange(i + 2, c).setValue(v);
-    n++;
-  }
+  const out = values.map(function (row, i) {
+    const v = fix(row[0], shown[i][0]);
+    if (v !== null) { n++; return [v]; }
+    // Unchanged cells are written back as they were; text keeps a leading ' so
+    // "1/2" stays text and nothing becomes a formula.
+    return [typeof row[0] === "string" && row[0] !== "" ? "'" + row[0] : row[0]];
+  });
+  if (n) range.setValues(out);
   return n;
 }
 
 // The clean-up runs by itself after an update (with the next records), at most every 6 hours.
 function repairIfDue() {
   const cache = CacheService.getScriptCache();
-  if (cache.get("repaired")) return;
+  if (cache.get("repaired-v2")) return;
   repairData();
-  cache.put("repaired", "1", 21600);
+  cache.put("repaired-v2", "1", 21600);
 }
 
 // "od2", "OD 02", "Od-6" -> "OD 2", "OD 6": one name per station.
@@ -245,11 +247,12 @@ function normStation(v) {
   const m = /^od\s*[-_.]?\s*0*(\d+)$/i.exec(s);
   return m ? "OD " + m[1] : s;
 }
-// Older app versions wrote "Towards Colombo / Godagama".
+// Older app versions wrote "Towards Colombo / Godagama" and "Towards Avissawella"
+// (now "Towards Rathnapura").
 function normDirection(v) {
   const s = String(v || "").trim();
   if (/^towards colombo/i.test(s)) return "Towards Colombo";
-  if (/^towards avissawella/i.test(s)) return "Towards Avissawella";
+  if (/^towards (avissawella|rath?napura)/i.test(s)) return "Towards Rathnapura";
   return s;
 }
 
@@ -264,6 +267,9 @@ function repairData() {
       return st !== String(shown).trim() ? st : null;
     }) + repairColumn(sheet, "Load Condition", function (v, shown) {
       return v instanceof Date ? "'" + undoDate(shown) : null;
+    }) + repairColumn(sheet, "Direction", function (v, shown) {
+      const d = normDirection(shown);
+      return d !== String(shown).trim() ? d : null;
     });
   });
   return n;
@@ -390,20 +396,20 @@ const VEHICLE_CLASSES = [
   ["Van", "Passenger", ["Passenger van", "Office van", "School van"]],
   ["Mini Bus", "Passenger", ["Minibus"]],
   ["Large Bus", "Passenger", ["Large bus"]],
-  ["Small Truck", "Freight", ["Delivery van", "Small lorry"]],
-  ["Medium Truck", "Freight", ["Medium truck (2 axle)", "Truck (2 axle)"]], // "Truck (2 axle)": records made before the split
-  ["Heavy Truck", "Freight", ["Heavy truck (2 axle)", "Container (20 ft / 3 axle)"]],
-  ["Container", "Freight", ["Multi-axle container (40 ft)"]],
+  ["Small Truck", "Freight", ["Delivery van", "Light truck (2 axles / 4 wheels)", "Small lorry"]],
+  ["Medium Truck", "Freight", ["Medium truck (2 axles / 6 wheels)", "Medium truck (2 axle)", "Truck (2 axle)"]], // "Truck (2 axle)": records made before the split
+  ["Heavy Truck", "Freight", ["Large truck (2 axles / 6 wheels)", "Heavy vehicle (3 axles / 10 wheels)", "Heavy truck (2 axle)"]],
+  ["Container", "Freight", ["Container with trailer", "Container (20 ft / 3 axle)", "Multi-axle container (40 ft)"]],
   ["Other freight", "Freight", ["Other"]]
 ];
 // Targets filled in when the Targets tab is first made (OD 1, OD 2 and OD 4 from
 // the sampling plan; hours = survey hours per day, 12 if not given). Change them
 // in the Targets tab or on the dashboard.
 // OD 1 (A008 near Ingiriya): Light truck -> Small Truck; Medium truck -> Medium Truck;
-// Large truck 60 + Heavy vehicle 8 + 20 ft container 1 -> Heavy Truck 69; 40 ft -> Container.
+// Large truck 60 + Heavy vehicle 8 -> Heavy Truck 68; containers 20 ft 1 + 40 ft 1 -> Container 2.
 const DEFAULT_TARGETS = {
   "OD 1": { hours: 6, "Motor Cycles": 500, "Three Wheeler": 240, "Car/Jeep/SUV/Double Cab": 360, "Van": 70, "Mini Bus": 6,
-            "Small Truck": 90, "Medium Truck": 80, "Heavy Truck": 69, "Container": 1 },
+            "Small Truck": 90, "Medium Truck": 80, "Heavy Truck": 68, "Container": 2 },
   "OD 2": { "Motor Cycles": 800, "Three Wheeler": 550, "Car/Jeep/SUV/Double Cab": 525, "Van": 125, "Mini Bus": 25,
             "Small Truck": 300, "Medium Truck": 300, "Heavy Truck": 200, "Container": 50 },
   "OD 4": { hours: 9, "Motor Cycles": 700, "Three Wheeler": 550, "Car/Jeep/SUV/Double Cab": 650, "Van": 125, "Mini Bus": 25,
@@ -555,7 +561,7 @@ function adminStats() {
     status: "success",
     survey: "od",
     version: 2, // 2: counts by direction and by enumerator
-    directions: ["Towards Colombo", "Towards Avissawella"],
+    directions: ["Towards Colombo", "Towards Rathnapura"],
     generated: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss"),
     total: rows.length,
     stations: STATIONS,

@@ -111,11 +111,11 @@ const FORM = [
         id: 'freightType', label: 'Vehicle type', type: 'single', grid: true, other: true, hint: 'Observe', showIf: isFreight,
         options: [
             ['Delivery van', 'fa-van-shuttle'],
-            ['Small lorry', 'fa-truck-pickup'],
-            ['Medium truck (2 axle)', 'fa-truck'],
-            ['Heavy truck (2 axle)', 'fa-truck-front'],
-            ['Container (20 ft / 3 axle)', 'fa-truck-moving'],
-            ['Multi-axle container (40 ft)', 'fa-truck-ramp-box']
+            ['Light truck (2 axles / 4 wheels)', 'fa-truck-pickup'],
+            ['Medium truck (2 axles / 6 wheels)', 'fa-truck'],
+            ['Large truck (2 axles / 6 wheels)', 'fa-truck-front'],
+            ['Heavy vehicle (3 axles / 10 wheels)', 'fa-truck-moving'],
+            ['Container with trailer', 'fa-truck-ramp-box']
         ]
     },
     {
@@ -265,6 +265,8 @@ const $ = id => document.getElementById(id);
 // State
 // ---------------------------------------------------------------------
 let session = readJSON(SESSION_KEY, null);
+// Shifts started before the direction was renamed: Avissawella -> Rathnapura.
+if (session && /^towards avissawella/i.test(session.direction || '')) { session.direction = 'Towards Rathnapura'; writeJSON(SESSION_KEY, session); }
 let answers = readJSON(DRAFT_KEY, {});
 let isSyncing = false;
 let inFlightIds = new Set();

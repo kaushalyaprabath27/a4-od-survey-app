@@ -11,7 +11,7 @@ window.A4_CONFIG = {
     surveyLocations: ['OD 1', 'OD 2', 'OD 3', 'OD 4', 'OD 5', 'OD 6', 'OD 7'],
 
     // Direction of travel surveyed, offered at the start of a shift and when switching.
-    directions: ['Towards Colombo', 'Towards Avissawella'],
+    directions: ['Towards Colombo', 'Towards Rathnapura'],
 
     // Optional. Leave empty to use free OpenStreetMap place suggestions.
     googlePlacesApiKey: '',
