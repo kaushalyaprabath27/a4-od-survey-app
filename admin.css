@@ -88,7 +88,22 @@ th.num { white-space: normal; }
 tr.group td { background: var(--surface-2); font-weight: 700; }
 tr.cls td { font-weight: 600; }
 .enum-btn { white-space: nowrap; font-size: 12px; }
-.enum-btn[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
+.enum-total { font: inherit; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--accent); background: var(--surface);
+    border: 1px solid var(--accent); border-radius: 999px; padding: 4px 10px; cursor: pointer; min-width: 64px; }
+.enum-total i { font-size: 10px; margin-left: 2px; }
+.enum-total:hover, .enum-total[aria-expanded="true"] { background: var(--accent); color: var(--accent-ink); }
+tr.enum-row-open > td { background: var(--surface-2); }
+/* The open box stays the width of the screen (the enumerator table itself scrolls sideways on a phone). */
+.enum-wrap { position: sticky; left: 0; width: min(100%, calc(100vw - 92px)); }
+.enum-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.enum-close { font-size: 13px; }
+@media (max-width: 600px) {
+    .enum-detail .bar { display: none; }   /* the % column says the same on a phone */
+    .enum-detail table { font-size: 13px; }
+    .enum-detail td, .enum-detail th { padding-left: 4px; padding-right: 4px; }
+    tr.enum-open > td { padding: 8px 6px 12px; }
+    .enum-wrap { width: min(100%, calc(100vw - 78px)); }
+}
 tr.enum-open > td { background: var(--surface-2); padding: 10px 12px 14px; }
 .enum-detail h3 { margin: 4px 0 8px; font-size: 14px; }
 .enum-detail table { background: var(--surface); }

@@ -250,19 +250,19 @@ function enumDetail(d, name) {
             if (!got && !target) return;
             tTot += target; cTot += got; cTarg += target ? Math.min(got, target) : 0;
             rows += `<tr class="cls"><td>${esc(line)}</td><td class="num">${target ? fmt(target) : '–'}</td><td class="num">${fmt(got)}</td>` +
-                `<td class="num ${target && got >= target ? 'met' : ''}">${target ? pct(got, target) + '%' : '–'}</td><td>${target ? progress(Math.min(got, target), target) : ''}</td></tr>`;
+                `<td class="num ${target && got >= target ? 'met' : ''}">${target ? pct(got, target) + '%' : '–'}</td><td class="bar">${target ? progress(Math.min(got, target), target) : ''}</td></tr>`;
             // The recorded types under the line, unless it is just the line's own type again.
             const seen = types.filter(ty => n.get(ty));
             if (seen.length > 1 || (seen.length === 1 && seen[0] !== types[0])) seen.forEach(ty => {
-                rows += `<tr class="sub"><td>${esc(ty)}</td><td></td><td class="num">${fmt(n.get(ty))}</td><td></td><td></td></tr>`;
+                rows += `<tr class="sub"><td>${esc(ty)}</td><td></td><td class="num">${fmt(n.get(ty))}</td><td></td><td class="bar"></td></tr>`;
             });
         });
-        rows += `<tr class="grand"><td>All vehicles</td><td class="num">${tTot ? fmt(tTot) : '–'}</td><td class="num">${fmt(cTot)}</td><td class="num ${tTot && cTarg >= tTot ? 'met' : ''}">${tTot ? pct(cTarg, tTot) + '%' : '–'}</td><td>${tTot ? progress(cTarg, tTot) : ''}</td></tr>`;
+        rows += `<tr class="grand"><td>All vehicles</td><td class="num">${tTot ? fmt(tTot) : '–'}</td><td class="num">${fmt(cTot)}</td><td class="num ${tTot && cTarg >= tTot ? 'met' : ''}">${tTot ? pct(cTarg, tTot) + '%' : '–'}</td><td class="bar">${tTot ? progress(cTarg, tTot) : ''}</td></tr>`;
         const note = plan
             ? `Target for one enumerator (${plan.enumerators} enumerators at ${esc(st)})${days > 1 ? ` × ${days} days worked` : ' per day'}. Progress counts each line up to its target.`
             : `No per-enumerator target set for ${esc(st)}.`;
         return `<div class="enum-detail"><h3>${esc(name)} · ${esc(st)}${state.date !== 'all' ? ' · ' + esc(state.date) : ''}</h3>
-            <div class="table-wrap"><table><tr><th>Type of vehicle</th><th class="num">Target</th><th class="num">Surveyed</th><th class="num">%</th><th>Progress</th></tr>${rows}</table></div>
+            <div class="table-wrap"><table><tr><th>Type of vehicle</th><th class="num">Target</th><th class="num">Surveyed</th><th class="num">%</th><th class="bar">Progress</th></tr>${rows}</table></div>
             <p class="muted small">${note}</p></div>`;
     }).join('');
 }
@@ -424,9 +424,11 @@ function odEnumerators(d, DIRS) {
         const cls = per(name), r = latest.get(name) || {};
         const g = grp => [...cls.entries()].filter(([c]) => groupOf(c) === grp).reduce((s, e) => s + e[1], 0);
         const open = openEnums.has(name);
-        const btn = `<button type="button" class="btn-ghost small enum-btn" data-enum="${esc(name)}" aria-expanded="${open}"><i class="fa-solid fa-${open ? 'chevron-up' : 'list-check'}"></i> Vehicle types</button>`;
-        return `<tr><td>${esc(name)}</td><td>${esc(r.station || '')}</td>${DIRS.map(dir => `<td class="num">${fmt(byDir.get(`${name}|${dir}`) || 0)}</td>`).join('')}<td class="num">${fmt(g('Passenger'))}</td><td class="num">${fmt(g('Freight'))}</td><td class="num"><b>${fmt(total.get(name))}</b></td><td>${esc(r.last || '')}</td><td>${btn}</td></tr>` +
-            (open ? `<tr class="enum-open"><td colspan="${DIRS.length + 7}">${enumDetail(d, name)}</td></tr>` : '');
+        // The total is the button: tap it to open this enumerator's count of each vehicle type.
+        const totalBtn = `<button type="button" class="enum-btn enum-total" data-enum="${esc(name)}" aria-expanded="${open}" title="${open ? 'Close' : 'Open'} ${esc(name)}'s vehicle types">${fmt(total.get(name))} <i class="fa-solid fa-${open ? 'chevron-up' : 'chevron-down'}"></i></button>`;
+        const closeBtn = `<button type="button" class="btn-ghost enum-btn enum-close" data-enum="${esc(name)}"><i class="fa-solid fa-xmark"></i> Close</button>`;
+        return `<tr${open ? ' class="enum-row-open"' : ''}><td>${esc(name)}</td><td>${esc(r.station || '')}</td><td class="num">${totalBtn}</td>${DIRS.map(dir => `<td class="num">${fmt(byDir.get(`${name}|${dir}`) || 0)}</td>`).join('')}<td class="num">${fmt(g('Passenger'))}</td><td class="num">${fmt(g('Freight'))}</td><td>${esc(r.last || '')}</td></tr>` +
+            (open ? `<tr class="enum-open"><td colspan="${DIRS.length + 6}"><div class="enum-wrap"><div class="enum-bar"><b>${esc(name)}: vehicle types</b>${closeBtn}</div>${enumDetail(d, name)}</div></td></tr>` : '');
     }).join('');
     // Enumerator x vehicle class (only classes with interviews)
     const usedClasses = d.classes.map(c => c.name).concat([...new Set([...byClass.keys()].map(k => k.slice(k.indexOf('|') + 1)))].filter(c => !d.classes.some(x => x.name === c)))
@@ -437,7 +439,7 @@ function odEnumerators(d, DIRS) {
     }).join('');
     const empty = '<tr><td colspan="9" class="empty">Nothing recorded yet.</td></tr>';
     return enumeratorTypes(d, names, total) + `<section class="card wide"><h2><i class="fa-solid fa-users"></i> Enumerators (${names.length})</h2>
-        <div class="table-wrap"><table><tr><th>Enumerator</th><th>Station (last)</th>${DIRS.map(x => `<th class="num">${esc(x)}</th>`).join('')}<th class="num">Passenger</th><th class="num">Freight</th><th class="num">Total</th><th>Last record</th><th></th></tr>${rows || empty}</table></div>
+        <div class="table-wrap"><table><tr><th>Enumerator</th><th>Station (last)</th><th class="num">Total<br><span class="small">tap to open</span></th>${DIRS.map(x => `<th class="num">${esc(x)}</th>`).join('')}<th class="num">Passenger</th><th class="num">Freight</th><th>Last record</th></tr>${rows || empty}</table></div>
         <details class="map card-note"${names.length ? '' : ' hidden'}><summary class="small">Each enumerator by vehicle class</summary>
         <div class="table-wrap"><table><tr><th>Enumerator</th>${usedClasses.map(c => `<th class="num">${esc(c)}</th>`).join('')}<th class="num">Total</th></tr>${matrix}</table></div></details></section>`;
 }
