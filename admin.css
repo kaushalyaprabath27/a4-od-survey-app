@@ -87,6 +87,15 @@ td:first-child { white-space: normal; min-width: 100px; }
 th.num { white-space: normal; }
 tr.group td { background: var(--surface-2); font-weight: 700; }
 tr.cls td { font-weight: 600; }
+table.recent td { vertical-align: top; font-size: 13px; }
+table.recent .nowrap, .recent-pick { white-space: nowrap; }
+.recent-pick select { margin-left: 4px; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); }
+.pf { display: inline-block; min-width: 18px; text-align: center; font-size: 11px; font-weight: 700; border-radius: 4px; padding: 0 3px; }
+.pf.p { background: rgba(37, 99, 235, 0.12); color: var(--accent); }
+.pf.f { background: rgba(180, 83, 9, 0.12); color: var(--warn); }
+.gps-ok { color: var(--good); }
+.gps-no { color: var(--bad); }
+.gps-old { color: var(--warn); }
 .enum-btn { white-space: nowrap; font-size: 12px; }
 .enum-total { font: inherit; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--accent); background: var(--surface);
     border: 1px solid var(--accent); border-radius: 999px; padding: 4px 10px; cursor: pointer; min-width: 64px; }

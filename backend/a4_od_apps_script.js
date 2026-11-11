@@ -419,6 +419,7 @@ const DEFAULT_TARGETS = {
             "Small Truck": 130, "Medium Truck": 124, "Heavy Truck": 185, "Container": 14 }
 };
 const STATIONS = ["OD 1", "OD 2", "OD 3", "OD 4", "OD 5", "OD 6", "OD 7"];
+const RECENT_PER_ENUMERATOR = 15; // latest interviews of each enumerator sent to the dashboard
 
 // Answers counted on the dashboard: [key, sheet header].
 const ADMIN_FIELDS = [
@@ -533,6 +534,7 @@ function adminStats() {
     agg[k] = (agg[k] || 0) + 1;
   };
   const recorders = {};
+  const latest = {}; // enumerator -> their interviews (key fields only)
   rows.forEach(function (r) {
     const st = normStation(r[col["Survey Location"]]) || "(no station)";
     const date = String(r[col["Date"]] || "").trim() || "(no date)";
@@ -559,6 +561,12 @@ function adminStats() {
       add(st, date, f[0], v);
     });
     add(st, date, "recorder", name);
+    const passenger = /Passenger/i.test(String(r[col["Vehicle Category"]]));
+    (latest[name] = latest[name] || []).push([
+      st, date, time, name, String(r[col["Form No"]] || ""), dir, passenger ? "P" : "F", String(r[col["Vehicle Type"]] || ""),
+      String(r[col["Origin (Village / Town)"]] || ""), String(r[col["Destination (Village / Town)"]] || ""),
+      String(r[col[passenger ? "Trip Purpose" : "Commodity"]] || ""), String(r[col["GPS Status"]] || "")
+    ]);
     const stamp = date + " " + time;
     const rec = recorders[name];
     if (!rec || stamp > rec.last) recorders[name] = { station: st, last: stamp };
@@ -566,7 +574,7 @@ function adminStats() {
   return {
     status: "success",
     survey: "od",
-    version: 4, // 2: counts by direction and by enumerator; 3: each recorded vehicle type by direction; 4: each enumerator by vehicle type
+    version: 5, // 2: counts by direction and by enumerator; 3: each recorded vehicle type by direction; 4: each enumerator by vehicle type; 5: latest interviews
     directions: ["Towards Colombo", "Towards Rathnapura"],
     generated: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss"),
     total: rows.length,
@@ -574,7 +582,11 @@ function adminStats() {
     classes: VEHICLE_CLASSES.map(function (c) { return { name: c[0], group: c[1], types: c[2] }; }),
     targets: readTargets(),
     counts: Object.keys(agg).map(function (k) { return k.split("\u0001").concat([agg[k]]); }),
-    recorders: Object.keys(recorders).map(function (n) { return { name: n, station: recorders[n].station, last: recorders[n].last }; })
+    recorders: Object.keys(recorders).map(function (n) { return { name: n, station: recorders[n].station, last: recorders[n].last }; }),
+    // [station, date, time, enumerator, form no, direction, P/F, vehicle type, origin, destination, purpose or goods, GPS status]
+    recent: Object.keys(latest).reduce(function (out, n) {
+      return out.concat(latest[n].sort(function (a, b) { return (b[1] + " " + b[2]).localeCompare(a[1] + " " + a[2]); }).slice(0, RECENT_PER_ENUMERATOR));
+    }, [])
   };
 }
 

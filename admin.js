@@ -47,6 +47,7 @@ const cleanStation = v => { const m = /^o?d\s*[-_.]?\s*0*(\d+)$/i.exec(String(v 
 function renameDirections(r) {
     if (Array.isArray(r.directions)) r.directions = [...new Set(r.directions.map(renameDir))];
     if (Array.isArray(r.recorders)) r.recorders.forEach(x => { x.station = cleanStation(x.station); });
+    if (Array.isArray(r.recent)) r.recent.forEach(x => { x[0] = cleanStation(x[0]); x[5] = renameDir(x[5]); });
     if (Array.isArray(r.counts)) r.counts.forEach(c => {
         c[0] = cleanStation(c[0]);
         if (c[2] === 'direction') c[3] = renameDir(c[3]);
@@ -96,6 +97,11 @@ $('logout').addEventListener('click', () => {
     $('pw').value = '';
 });
 $('refresh').addEventListener('click', refreshAll);
+$('view').addEventListener('change', e => {
+    if (e.target.id !== 'recent-who') return;
+    recentWho = e.target.value;
+    render();
+});
 $('view').addEventListener('click', e => {
     const b = e.target.closest('.enum-btn');
     if (!b) return;
@@ -385,7 +391,38 @@ function odView(d) {
     html += bars('Commodity (freight)', tally(d, 'commodity'));
     html += bars('Load condition (freight)', tally(d, 'load'));
     html += bars('Monthly household income (owners)', tally(d, 'income'));
+    html += recentCard(d);
     return html;
+}
+
+// Last 15 interviews (everyone, or one enumerator) for the station and date picked: key fields only.
+let recentWho = 'all';
+function recentCard(d) {
+    const head = '<section class="card wide"><h2><i class="fa-solid fa-clock-rotate-left"></i> Last 15 interviews';
+    if (!(d.version >= 5)) return head + '</h2><p class="muted small">Update the Apps Script (Deploy > Manage deployments > New version) to see the latest interviews here.</p></section>';
+    const inView = (d.recent || []).filter(x => (state.station === 'all' || x[0] === state.station) && (state.date === 'all' || x[1] === state.date));
+    const names = [...new Set(inView.map(x => x[3]))].sort((a, b) => a.localeCompare(b));
+    if (recentWho !== 'all' && !names.includes(recentWho)) recentWho = 'all';
+    const list = inView.filter(x => recentWho === 'all' || x[3] === recentWho)
+        .sort((a, b) => (b[1] + ' ' + b[2]).localeCompare(a[1] + ' ' + a[2])).slice(0, 15);
+    const pick = `<label class="small recent-pick">Enumerator <select id="recent-who"><option value="all">All enumerators</option>${names.map(n => `<option${n === recentWho ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></label>`;
+    const shortDir = v => /colombo/i.test(v) ? '→ Colombo' : /rath?napura/i.test(v) ? '→ Rathnapura' : v;
+    const shortType = v => String(v).replace(/\s*\(.*\)$/, '');
+    const gps = v => v === 'ok' ? '<i class="fa-solid fa-location-dot gps-ok" title="GPS recorded"></i>'
+        : v === 'stale' ? '<i class="fa-solid fa-location-dot gps-old" title="GPS position from a few minutes earlier"></i>'
+        : `<i class="fa-solid fa-location-crosshairs gps-no" title="No GPS (${esc(v || 'not recorded')})"></i>`;
+    const showSt = state.station === 'all', showDate = state.date === 'all';
+    const rows = list.map(x => `<tr>
+        <td class="nowrap">${showDate ? `<span class="muted small">${esc(x[1].slice(5))}</span> ` : ''}${esc(x[2].slice(0, 5))}</td>
+        <td>${esc(x[3])}${showSt ? ` <span class="muted small">${esc(x[0])}</span>` : ''}<br><span class="muted small">${esc(x[4])}</span></td>
+        <td class="nowrap">${esc(shortDir(x[5]))}</td>
+        <td><span class="pf ${x[6] === 'P' ? 'p' : 'f'}">${x[6]}</span> ${esc(shortType(x[7]))}</td>
+        <td>${esc(x[8] || '–')} → ${esc(x[9] || '–')}</td>
+        <td>${esc(x[10] || '–')}</td>
+        <td class="num">${gps(x[11])}</td></tr>`).join('');
+    return head + `<span class="spacer"></span>${pick}</h2>
+        <div class="table-wrap"><table class="recent"><tr><th>Time</th><th>Enumerator / Form No.</th><th>Direction</th><th>Vehicle</th><th>Origin → Destination</th><th>Trip purpose / goods</th><th class="num">GPS</th></tr>${rows || '<tr><td colspan="7" class="empty">No interviews for the station and date picked.</td></tr>'}</table></div>
+        <p class="muted small card-note">Newest first. P = passenger, F = freight. GPS: green = recorded, orange = position from a few minutes earlier, red = none. The dashboard gets each enumerator's latest 15 interviews.</p></section>`;
 }
 
 // Counts of each enumerator: by direction, passenger / freight, and by vehicle class.
