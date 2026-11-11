@@ -87,6 +87,10 @@ td:first-child { white-space: normal; min-width: 100px; }
 th.num { white-space: normal; }
 tr.group td { background: var(--surface-2); font-weight: 700; }
 tr.cls td { font-weight: 600; }
+table.enum-types th.band { text-align: center; color: var(--text); border-bottom: 1px solid var(--border); }
+table.enum-types th, table.enum-types td { white-space: nowrap; }
+table.enum-types td:first-child, table.enum-types th:first-child { position: sticky; left: 0; background: var(--surface); z-index: 1; }
+table.enum-types .gt { background: var(--surface-2); }
 tr.sub td { font-size: 0.85em; color: var(--muted); padding-top: 2px; padding-bottom: 2px; border-top: 0; }
 tr.sub td:first-child { padding-left: 1.6em; }
 tr.sub td:first-child::before { content: "\21B3  "; opacity: 0.6; }

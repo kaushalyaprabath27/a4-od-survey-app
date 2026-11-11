@@ -549,6 +549,7 @@ function adminStats() {
     add(st, date, "hour", hour + "|" + classGroup(cls));
     add(st, date, "recDir", name + "|" + dir);
     add(st, date, "recClass", name + "|" + cls);
+    add(st, date, "recType", name + "|" + type);
     ADMIN_FIELDS.forEach(function (f) {
       let v = String(r[col[f[1]]] || "").trim();
       if (f[0] === "direction") v = normDirection(v);
@@ -565,7 +566,7 @@ function adminStats() {
   return {
     status: "success",
     survey: "od",
-    version: 3, // 2: counts by direction and by enumerator; 3: each recorded vehicle type by direction
+    version: 4, // 2: counts by direction and by enumerator; 3: each recorded vehicle type by direction; 4: each enumerator by vehicle type
     directions: ["Towards Colombo", "Towards Rathnapura"],
     generated: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss"),
     total: rows.length,

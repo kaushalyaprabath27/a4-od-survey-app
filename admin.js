@@ -361,10 +361,47 @@ function odEnumerators(d, DIRS) {
         return `<tr><td>${esc(name)}</td>${usedClasses.map(c => `<td class="num">${cls.get(c) ? fmt(cls.get(c)) : '<span class="muted">0</span>'}</td>`).join('')}<td class="num"><b>${fmt(total.get(name))}</b></td></tr>`;
     }).join('');
     const empty = '<tr><td colspan="9" class="empty">Nothing recorded yet.</td></tr>';
-    return `<section class="card wide"><h2><i class="fa-solid fa-users"></i> Enumerators (${names.length})</h2>
+    return enumeratorTypes(d, names, total) + `<section class="card wide"><h2><i class="fa-solid fa-users"></i> Enumerators (${names.length})</h2>
         <div class="table-wrap"><table><tr><th>Enumerator</th><th>Station (last)</th>${DIRS.map(x => `<th class="num">${esc(x)}</th>`).join('')}<th class="num">Passenger</th><th class="num">Freight</th><th class="num">Total</th><th>Last record</th></tr>${rows || empty}</table></div>
         <details class="map card-note"${names.length ? '' : ' hidden'}><summary class="small">Each enumerator by vehicle class</summary>
         <div class="table-wrap"><table><tr><th>Enumerator</th>${usedClasses.map(c => `<th class="num">${esc(c)}</th>`).join('')}<th class="num">Total</th></tr>${matrix}</table></div></details></section>`;
+}
+
+// Each enumerator x each vehicle type as recorded in the app (script version 4 and later).
+function enumeratorTypes(d, names, total) {
+    const head = `<section class="card wide"><h2><i class="fa-solid fa-table-cells"></i> Enumerators by vehicle type</h2>`;
+    if (!(d.version >= 4)) {
+        return head + '<p class="muted small">Update the Apps Script (Deploy > Manage deployments > New version) to see how many of each vehicle type every enumerator recorded.</p></section>';
+    }
+    const byType = tally(d, 'recType'); // "name|type" -> n
+    const used = new Set([...byType.keys()].map(k => k.slice(k.indexOf('|') + 1)));
+    const classOf = ty => d.classes.find(c => c.types.includes(ty));
+    // Columns: the app's types in class order, then older type names that have interviews.
+    const cols = [];
+    ['Passenger', 'Freight'].forEach(g => {
+        d.classes.filter(c => c.group === g).forEach(c => c.types.forEach(ty => {
+            if (APP_TYPES.includes(ty) || used.has(ty)) cols.push({ ty, group: g, old: !APP_TYPES.includes(ty) });
+        }));
+    });
+    used.forEach(ty => { if (!cols.some(c => c.ty === ty)) cols.push({ ty, group: 'Other', old: !APP_TYPES.includes(ty) }); });
+    const label = c => c.old ? c.ty : c.ty.replace(/\s*\(.*\)$/, '');
+    const sub = c => c.old ? 'earlier form' : (c.ty.match(/\((.*)\)$/) || [])[1] || '';
+    const n = (name, ty) => byType.get(`${name}|${ty}`) || 0;
+    const cell = v => `<td class="num">${v ? fmt(v) : '<span class="muted">0</span>'}</td>`;
+    const groups = ['Passenger', 'Freight', 'Other'].filter(g => cols.some(c => c.group === g));
+    const gsum = (name, g) => cols.filter(c => c.group === g).reduce((s, c) => s + n(name, c.ty), 0);
+    const bandTitle = { Passenger: 'Passenger vehicles', Freight: 'Freight vehicles', Other: 'Other' };
+    const band = groups.map(g => `<th class="band" colspan="${cols.filter(c => c.group === g).length + (g === 'Other' ? 0 : 1)}">${bandTitle[g]}</th>`).join('');
+    const ths = groups.map(g => cols.filter(c => c.group === g).map(c => `<th class="num" title="${esc(c.ty)}">${esc(label(c))}${sub(c) ? `<br><span class="small">${esc(sub(c))}</span>` : ''}</th>`).join('') +
+        (g === 'Other' ? '' : `<th class="num gt">${g}<br><span class="small">total</span></th>`)).join('');
+    const rowFor = (name, get) => groups.map(g => cols.filter(c => c.group === g).map(c => cell(get(c.ty))).join('') +
+        (g === 'Other' ? '' : `<td class="num gt"><b>${fmt(cols.filter(c => c.group === g).reduce((s, c) => s + get(c.ty), 0))}</b></td>`)).join('');
+    const rows = names.map(name => `<tr><td>${esc(name)}</td>${rowFor(name, ty => n(name, ty))}<td class="num"><b>${fmt(total.get(name) || 0)}</b></td></tr>`).join('');
+    const colTotal = ty => names.reduce((s, name) => s + n(name, ty), 0);
+    const totalRow = names.length ? `<tr class="grand"><td>All enumerators</td>${rowFor('', colTotal)}<td class="num"><b>${fmt(names.reduce((s, name) => s + (total.get(name) || 0), 0))}</b></td></tr>` : '';
+    const span = cols.length + groups.filter(g => g !== 'Other').length + 2;
+    return head + `<div class="table-wrap"><table class="enum-types"><tr><th></th>${band}<th></th></tr><tr><th>Enumerator</th>${ths}<th class="num">Total</th></tr>${rows || `<tr><td colspan="${span}" class="empty">Nothing recorded yet.</td></tr>`}${totalRow}</table></div>
+        <p class="muted small card-note">For the station and date picked above. Scroll sideways for the freight types.</p></section>`;
 }
 
 function wireTargets(d) {
