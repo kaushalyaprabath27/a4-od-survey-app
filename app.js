@@ -1449,6 +1449,48 @@ function sessionRecords() {
 function updateCount() { $('count-session').textContent = sessionRecords().length; }
 
 // ---------------------------------------------------------------------
+// My vehicles today: this enumerator's interviews on this phone (today, this
+// station) per vehicle line, against the per-enumerator target in config.js.
+// ---------------------------------------------------------------------
+function myVehiclesHtml() {
+    const today = formatDate(Date.now());
+    const st = normStation(session.location);
+    const who = String(session.name || '').trim().toLowerCase();
+    const mine = readJSON(BACKUP_KEY, []).filter(r => r.date === today && normStation(r.surveyLocation) === st &&
+        String(r.name || '').trim().toLowerCase() === who);
+    const n = new Map();
+    mine.forEach(r => {
+        const ty = /^Other/.test(r.vehicleType || '') ? 'Other' : (r.vehicleType || '(no type)');
+        n.set(ty, (n.get(ty) || 0) + 1);
+    });
+    const lines = (CONFIG.enumeratorLines || []).slice();
+    [...n.keys()].filter(ty => !lines.some(l => l[1].includes(ty))).forEach(ty => lines.push([ty, [ty]]));
+    const plan = (CONFIG.enumeratorTargets || {})[st];
+    let rows = '', tTot = 0, cTot = 0, cTarg = 0;
+    lines.forEach(([line, types]) => {
+        const got = types.reduce((s, ty) => s + (n.get(ty) || 0), 0);
+        const target = plan && plan.byLine[line] ? plan.byLine[line] : 0;
+        if (!got && !target) return;
+        tTot += target; cTot += got; cTarg += target ? Math.min(got, target) : 0;
+        const met = target && got >= target;
+        rows += `<tr class="${met ? 'met' : ''}"><td>${escapeHtml(line)}</td><td>${target || '–'}</td><td>${got}</td><td>${target ? (met ? '✓ ' : '') + Math.round(100 * got / target) + '%' : ''}</td></tr>`;
+        const seen = types.filter(ty => n.get(ty));
+        if (seen.length > 1 || (seen.length === 1 && seen[0] !== types[0])) seen.forEach(ty => {
+            rows += `<tr class="sub"><td>${escapeHtml(ty)}</td><td></td><td>${n.get(ty)}</td><td></td></tr>`;
+        });
+    });
+    rows += `<tr class="tot"><td>All vehicles</td><td>${tTot || '–'}</td><td>${cTot}</td><td>${tTot ? Math.round(100 * cTarg / tTot) + '%' : ''}</td></tr>`;
+    const note = plan
+        ? `Today at ${escapeHtml(st)}, interviews saved on this phone. Target for one enumerator (${plan.enumerators} at ${escapeHtml(st)}). The total % counts each line up to its target.`
+        : `Today at ${escapeHtml(st)}, interviews saved on this phone. No per-enumerator target is set for ${escapeHtml(st)}.`;
+    return `<table class="myv"><tr><th>Type of vehicle</th><th>Target</th><th>Done</th><th>%</th></tr>${rows}</table><p class="myv-note">${note}</p>`;
+}
+$('btn-my-vehicles').addEventListener('click', () => {
+    if (!session) return;
+    openModal({ title: `${session.name}: my vehicles today`, html: myVehiclesHtml(), okLabel: 'Close', showCancel: false });
+});
+
+// ---------------------------------------------------------------------
 // End shift
 // ---------------------------------------------------------------------
 $('btn-end').addEventListener('click', async () => {

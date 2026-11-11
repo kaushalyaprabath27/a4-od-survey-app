@@ -657,3 +657,17 @@ body.route-full-open .theme-btn, body.route-full-open .topbar, body.route-full-o
 .plate .plate-prefix { flex: 1 1 110px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
 .plate .plate-number { flex: 1 1 90px; letter-spacing: 0.08em; font-weight: 600; }
 .plate .plate-sri, .plate .amount-nk { flex: 0 0 auto; }
+
+/* My vehicles today (pop-up from the count button) */
+#modal-body table.myv { font-size: 0.85rem; }
+#modal-body table.myv th { text-align: right; font-size: 0.72rem; color: var(--text-secondary); padding: 2px 0 4px 6px; border-bottom: 1px solid var(--glass-border); }
+#modal-body table.myv th:first-child, #modal-body table.myv td:first-child { text-align: left; padding-left: 0; }
+#modal-body table.myv td { text-align: right; padding: 4px 0 4px 6px; font-weight: 600; }
+#modal-body table.myv td:first-child { font-weight: 600; }
+#modal-body table.myv td:last-child { color: var(--text-secondary); white-space: nowrap; }
+#modal-body table.myv tr.met td:last-child { color: var(--ok); }
+#modal-body table.myv tr.sub td { font-size: 0.78rem; font-weight: 400; color: var(--text-secondary); padding-top: 1px; padding-bottom: 1px; border-bottom: 0; }
+#modal-body table.myv tr.sub td:first-child { padding-left: 1rem; }
+#modal-body table.myv tr.tot td { font-weight: 800; border-top: 2px solid var(--glass-border); border-bottom: 0; }
+#modal-body .myv-note { font-size: 0.75rem; margin-top: 0.5rem; }
+#btn-my-vehicles .my-chev { font-size: 0.65rem; margin-left: 2px; color: var(--text-secondary); }

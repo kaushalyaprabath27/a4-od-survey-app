@@ -205,28 +205,9 @@ const APP_TYPES = [
     'Heavy vehicle (3 axles / 10 wheels)', 'Container with trailer', 'Other'
 ];
 
-// Daily target for ONE enumerator, per vehicle line of the sampling plan (OD 5: 18 enumerators).
-// Each line lists the app vehicle types (and older names) counted in it.
-const ENUM_LINES = [
-    ['Motor Cycles', ['Motorcycle']],
-    ['Three Wheeler', ['3-wheeler']],
-    ['Car/Jeep/SUV/Double Cab', ['Taxi', 'Car / Jeep']],
-    ['Van', ['Passenger van', 'Office van', 'School van']],
-    ['Medium Bus', ['Minibus']],
-    ['Large bus', ['Large bus']],
-    ['Light Truck (2 axles / 4 wheels)', ['Light truck (2 axles / 4 wheels)', 'Delivery van', 'Small lorry']],
-    ['Medium Truck (2 axles / 6 wheels)', ['Medium truck (2 axles / 6 wheels)', 'Medium truck (2 axle)', 'Truck (2 axle)']],
-    ['Large Truck (2 axles / 6 wheels)', ['Large truck (2 axles / 6 wheels)', 'Heavy truck (2 axle)']],
-    ['Heavy Vehicle (3 axles / 10 wheels)', ['Heavy vehicle (3 axles / 10 wheels)']],
-    ['Container with trailer (20 ft + 40 ft)', ['Container with trailer', 'Container (20 ft / 3 axle)', 'Multi-axle container (40 ft)']],
-    ['Other freight', ['Other']]
-];
-const ENUM_TARGETS = {
-    'OD 5': { enumerators: 18, byLine: {
-        'Motor Cycles': 50, 'Three Wheeler': 23, 'Car/Jeep/SUV/Double Cab': 25, 'Van': 7, 'Medium Bus': 2,
-        'Light Truck (2 axles / 4 wheels)': 8, 'Medium Truck (2 axles / 6 wheels)': 7, 'Large Truck (2 axles / 6 wheels)': 9,
-        'Heavy Vehicle (3 axles / 10 wheels)': 2, 'Container with trailer (20 ft + 40 ft)': 2 } }
-};
+// Daily target for ONE enumerator, per line of the sampling plan: set in config.js (shared with the app).
+const ENUM_LINES = (window.A4_CONFIG && window.A4_CONFIG.enumeratorLines) || [];
+const ENUM_TARGETS = (window.A4_CONFIG && window.A4_CONFIG.enumeratorTargets) || {};
 const openEnums = new Set(); // enumerators whose vehicle counts are open
 
 // One enumerator's count of each vehicle type at each station, against the per-enumerator target.
