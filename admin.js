@@ -46,8 +46,10 @@ const renameDir = v => String(v).replace(/^Towards Avissawella/i, 'Towards Rathn
 const cleanStation = v => { const m = /^o?d\s*[-_.]?\s*0*(\d+)$/i.exec(String(v || '').trim()); return m ? `OD ${m[1]}` : String(v || '').trim(); };
 function renameDirections(r) {
     if (Array.isArray(r.directions)) r.directions = [...new Set(r.directions.map(renameDir))];
-    if (Array.isArray(r.recorders)) r.recorders.forEach(x => { x.station = cleanStation(x.station); });
-    if (Array.isArray(r.recent)) r.recent.forEach(x => { x[0] = cleanStation(x[0]); x[5] = renameDir(x[5]); });
+    // Times as "09:59:28", not "9:59:28", so they sort in order.
+    const padTime = t => String(t || '').replace(/(^|\s)(\d)(?=:)/, '$10$2');
+    if (Array.isArray(r.recorders)) r.recorders.forEach(x => { x.station = cleanStation(x.station); x.last = padTime(x.last); });
+    if (Array.isArray(r.recent)) r.recent.forEach(x => { x[0] = cleanStation(x[0]); x[5] = renameDir(x[5]); x[2] = padTime(x[2]); });
     if (Array.isArray(r.counts)) r.counts.forEach(c => {
         c[0] = cleanStation(c[0]);
         if (c[2] === 'direction') c[3] = renameDir(c[3]);

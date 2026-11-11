@@ -538,7 +538,8 @@ function adminStats() {
   rows.forEach(function (r) {
     const st = normStation(r[col["Survey Location"]]) || "(no station)";
     const date = String(r[col["Date"]] || "").trim() || "(no date)";
-    const time = String(r[col["Time"]] || "").trim();
+    // "9:59:28" -> "09:59:28", so times sort in order ("9:59" would come after "13:05" as text).
+    const time = String(r[col["Time"]] || "").trim().replace(/^(\d)(?=:)/, "0$1");
     const m = /^(\d{1,2})/.exec(time);
     const hour = m ? ("0" + m[1]).slice(-2) : "??";
     const cls = vehicleClass(String(r[col["Vehicle Category"]]).trim(), r[col["Vehicle Type"]]);
