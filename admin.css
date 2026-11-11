@@ -87,6 +87,12 @@ td:first-child { white-space: normal; min-width: 100px; }
 th.num { white-space: normal; }
 tr.group td { background: var(--surface-2); font-weight: 700; }
 tr.cls td { font-weight: 600; }
+.enum-btn { white-space: nowrap; font-size: 12px; }
+.enum-btn[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
+tr.enum-open > td { background: var(--surface-2); padding: 10px 12px 14px; }
+.enum-detail h3 { margin: 4px 0 8px; font-size: 14px; }
+.enum-detail table { background: var(--surface); }
+.enum-detail + .enum-detail { margin-top: 14px; }
 table.enum-types th.band { text-align: center; color: var(--text); border-bottom: 1px solid var(--border); }
 table.enum-types th, table.enum-types td { white-space: nowrap; }
 table.enum-types td:first-child, table.enum-types th:first-child { position: sticky; left: 0; background: var(--surface); z-index: 1; }

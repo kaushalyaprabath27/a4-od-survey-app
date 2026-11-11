@@ -43,9 +43,12 @@ async function call(survey, body) {
 // "Towards Avissawella" is now "Towards Rathnapura": rename it in what the backend sends
 // (older script versions, and interviews saved before the change) so both count as one.
 const renameDir = v => String(v).replace(/^Towards Avissawella/i, 'Towards Rathnapura');
+const cleanStation = v => { const m = /^o?d\s*[-_.]?\s*0*(\d+)$/i.exec(String(v || '').trim()); return m ? `OD ${m[1]}` : String(v || '').trim(); };
 function renameDirections(r) {
     if (Array.isArray(r.directions)) r.directions = [...new Set(r.directions.map(renameDir))];
+    if (Array.isArray(r.recorders)) r.recorders.forEach(x => { x.station = cleanStation(x.station); });
     if (Array.isArray(r.counts)) r.counts.forEach(c => {
+        c[0] = cleanStation(c[0]);
         if (c[2] === 'direction') c[3] = renameDir(c[3]);
         else if (c[2] === 'classDir' || c[2] === 'recDir' || c[2] === 'typeDir') c[3] = String(c[3]).replace(/\|Towards Avissawella$/i, '|Towards Rathnapura');
     });
@@ -93,6 +96,13 @@ $('logout').addEventListener('click', () => {
     $('pw').value = '';
 });
 $('refresh').addEventListener('click', refreshAll);
+$('view').addEventListener('click', e => {
+    const b = e.target.closest('.enum-btn');
+    if (!b) return;
+    const name = b.dataset.enum;
+    openEnums.has(name) ? openEnums.delete(name) : openEnums.add(name);
+    render();
+});
 
 function showDash() {
     $('login').classList.add('hidden');
@@ -194,6 +204,68 @@ const APP_TYPES = [
     'Delivery van', 'Light truck (2 axles / 4 wheels)', 'Medium truck (2 axles / 6 wheels)', 'Large truck (2 axles / 6 wheels)',
     'Heavy vehicle (3 axles / 10 wheels)', 'Container with trailer', 'Other'
 ];
+
+// Daily target for ONE enumerator, per vehicle line of the sampling plan (OD 5: 18 enumerators).
+// Each line lists the app vehicle types (and older names) counted in it.
+const ENUM_LINES = [
+    ['Motor Cycles', ['Motorcycle']],
+    ['Three Wheeler', ['3-wheeler']],
+    ['Car/Jeep/SUV/Double Cab', ['Taxi', 'Car / Jeep']],
+    ['Van', ['Passenger van', 'Office van', 'School van']],
+    ['Medium Bus', ['Minibus']],
+    ['Large bus', ['Large bus']],
+    ['Light Truck (2 axles / 4 wheels)', ['Light truck (2 axles / 4 wheels)', 'Delivery van', 'Small lorry']],
+    ['Medium Truck (2 axles / 6 wheels)', ['Medium truck (2 axles / 6 wheels)', 'Medium truck (2 axle)', 'Truck (2 axle)']],
+    ['Large Truck (2 axles / 6 wheels)', ['Large truck (2 axles / 6 wheels)', 'Heavy truck (2 axle)']],
+    ['Heavy Vehicle (3 axles / 10 wheels)', ['Heavy vehicle (3 axles / 10 wheels)']],
+    ['Container with trailer (20 ft + 40 ft)', ['Container with trailer', 'Container (20 ft / 3 axle)', 'Multi-axle container (40 ft)']],
+    ['Other freight', ['Other']]
+];
+const ENUM_TARGETS = {
+    'OD 5': { enumerators: 18, byLine: {
+        'Motor Cycles': 50, 'Three Wheeler': 23, 'Car/Jeep/SUV/Double Cab': 25, 'Van': 7, 'Medium Bus': 2,
+        'Light Truck (2 axles / 4 wheels)': 8, 'Medium Truck (2 axles / 6 wheels)': 7, 'Large Truck (2 axles / 6 wheels)': 9,
+        'Heavy Vehicle (3 axles / 10 wheels)': 2, 'Container with trailer (20 ft + 40 ft)': 2 } }
+};
+const openEnums = new Set(); // enumerators whose vehicle counts are open
+
+// One enumerator's count of each vehicle type at each station, against the per-enumerator target.
+function enumDetail(d, name) {
+    const mine = (d.counts || []).filter(r => r[2] === 'recType' && r[3].startsWith(name + '|') &&
+        (state.station === 'all' || r[0] === state.station) && (state.date === 'all' || r[1] === state.date));
+    if (!(d.version >= 4)) return '<p class="muted small">Update the Apps Script to see each enumerator\'s vehicle types.</p>';
+    const stations = [...new Set(mine.map(r => r[0]))].sort();
+    if (!stations.length) return '<p class="muted small">No interviews for the station and date picked.</p>';
+    return stations.map(st => {
+        const n = new Map();
+        mine.filter(r => r[0] === st).forEach(r => { const ty = r[3].slice(name.length + 1); n.set(ty, (n.get(ty) || 0) + r[4]); });
+        const days = state.date === 'all'
+            ? new Set((d.counts || []).filter(r => r[2] === 'recorder' && r[3] === name && r[0] === st).map(r => r[1])).size || 1 : 1;
+        const plan = ENUM_TARGETS[st];
+        const lines = ENUM_LINES.concat([...n.keys()].filter(ty => !ENUM_LINES.some(l => l[1].includes(ty))).map(ty => [ty, [ty]]));
+        let rows = '', tTot = 0, cTot = 0, cTarg = 0;
+        lines.forEach(([line, types]) => {
+            const got = types.reduce((s, ty) => s + (n.get(ty) || 0), 0);
+            const target = plan && plan.byLine[line] ? plan.byLine[line] * days : 0;
+            if (!got && !target) return;
+            tTot += target; cTot += got; cTarg += target ? Math.min(got, target) : 0;
+            rows += `<tr class="cls"><td>${esc(line)}</td><td class="num">${target ? fmt(target) : '–'}</td><td class="num">${fmt(got)}</td>` +
+                `<td class="num ${target && got >= target ? 'met' : ''}">${target ? pct(got, target) + '%' : '–'}</td><td>${target ? progress(Math.min(got, target), target) : ''}</td></tr>`;
+            // The recorded types under the line, unless it is just the line's own type again.
+            const seen = types.filter(ty => n.get(ty));
+            if (seen.length > 1 || (seen.length === 1 && seen[0] !== types[0])) seen.forEach(ty => {
+                rows += `<tr class="sub"><td>${esc(ty)}</td><td></td><td class="num">${fmt(n.get(ty))}</td><td></td><td></td></tr>`;
+            });
+        });
+        rows += `<tr class="grand"><td>All vehicles</td><td class="num">${tTot ? fmt(tTot) : '–'}</td><td class="num">${fmt(cTot)}</td><td class="num ${tTot && cTarg >= tTot ? 'met' : ''}">${tTot ? pct(cTarg, tTot) + '%' : '–'}</td><td>${tTot ? progress(cTarg, tTot) : ''}</td></tr>`;
+        const note = plan
+            ? `Target for one enumerator (${plan.enumerators} enumerators at ${esc(st)})${days > 1 ? ` × ${days} days worked` : ' per day'}. Progress counts each line up to its target.`
+            : `No per-enumerator target set for ${esc(st)}.`;
+        return `<div class="enum-detail"><h3>${esc(name)} · ${esc(st)}${state.date !== 'all' ? ' · ' + esc(state.date) : ''}</h3>
+            <div class="table-wrap"><table><tr><th>Type of vehicle</th><th class="num">Target</th><th class="num">Surveyed</th><th class="num">%</th><th>Progress</th></tr>${rows}</table></div>
+            <p class="muted small">${note}</p></div>`;
+    }).join('');
+}
 
 function odTargets(d) {
     // Sum of the targets of the selected station(s): per class, per group, and per hour per group.
@@ -351,7 +423,10 @@ function odEnumerators(d, DIRS) {
     const rows = names.map(name => {
         const cls = per(name), r = latest.get(name) || {};
         const g = grp => [...cls.entries()].filter(([c]) => groupOf(c) === grp).reduce((s, e) => s + e[1], 0);
-        return `<tr><td>${esc(name)}</td><td>${esc(r.station || '')}</td>${DIRS.map(dir => `<td class="num">${fmt(byDir.get(`${name}|${dir}`) || 0)}</td>`).join('')}<td class="num">${fmt(g('Passenger'))}</td><td class="num">${fmt(g('Freight'))}</td><td class="num"><b>${fmt(total.get(name))}</b></td><td>${esc(r.last || '')}</td></tr>`;
+        const open = openEnums.has(name);
+        const btn = `<button type="button" class="btn-ghost small enum-btn" data-enum="${esc(name)}" aria-expanded="${open}"><i class="fa-solid fa-${open ? 'chevron-up' : 'list-check'}"></i> Vehicle types</button>`;
+        return `<tr><td>${esc(name)}</td><td>${esc(r.station || '')}</td>${DIRS.map(dir => `<td class="num">${fmt(byDir.get(`${name}|${dir}`) || 0)}</td>`).join('')}<td class="num">${fmt(g('Passenger'))}</td><td class="num">${fmt(g('Freight'))}</td><td class="num"><b>${fmt(total.get(name))}</b></td><td>${esc(r.last || '')}</td><td>${btn}</td></tr>` +
+            (open ? `<tr class="enum-open"><td colspan="${DIRS.length + 7}">${enumDetail(d, name)}</td></tr>` : '');
     }).join('');
     // Enumerator x vehicle class (only classes with interviews)
     const usedClasses = d.classes.map(c => c.name).concat([...new Set([...byClass.keys()].map(k => k.slice(k.indexOf('|') + 1)))].filter(c => !d.classes.some(x => x.name === c)))
@@ -362,7 +437,7 @@ function odEnumerators(d, DIRS) {
     }).join('');
     const empty = '<tr><td colspan="9" class="empty">Nothing recorded yet.</td></tr>';
     return enumeratorTypes(d, names, total) + `<section class="card wide"><h2><i class="fa-solid fa-users"></i> Enumerators (${names.length})</h2>
-        <div class="table-wrap"><table><tr><th>Enumerator</th><th>Station (last)</th>${DIRS.map(x => `<th class="num">${esc(x)}</th>`).join('')}<th class="num">Passenger</th><th class="num">Freight</th><th class="num">Total</th><th>Last record</th></tr>${rows || empty}</table></div>
+        <div class="table-wrap"><table><tr><th>Enumerator</th><th>Station (last)</th>${DIRS.map(x => `<th class="num">${esc(x)}</th>`).join('')}<th class="num">Passenger</th><th class="num">Freight</th><th class="num">Total</th><th>Last record</th><th></th></tr>${rows || empty}</table></div>
         <details class="map card-note"${names.length ? '' : ' hidden'}><summary class="small">Each enumerator by vehicle class</summary>
         <div class="table-wrap"><table><tr><th>Enumerator</th>${usedClasses.map(c => `<th class="num">${esc(c)}</th>`).join('')}<th class="num">Total</th></tr>${matrix}</table></div></details></section>`;
 }

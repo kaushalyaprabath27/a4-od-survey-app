@@ -236,15 +236,15 @@ function repairColumn(sheet, header, fix) {
 // The clean-up runs by itself after an update (with the next records), at most every 6 hours.
 function repairIfDue() {
   const cache = CacheService.getScriptCache();
-  if (cache.get("repaired-v2")) return;
+  if (cache.get("repaired-v3")) return;
   repairData();
-  cache.put("repaired-v2", "1", 21600);
+  cache.put("repaired-v3", "1", 21600);
 }
 
-// "od2", "OD 02", "Od-6" -> "OD 2", "OD 6": one name per station.
+// "od2", "OD 02", "Od-6", "D5" -> "OD 2", "OD 6", "OD 5": one name per station.
 function normStation(v) {
   const s = String(v === undefined || v === null ? "" : v).trim();
-  const m = /^od\s*[-_.]?\s*0*(\d+)$/i.exec(s);
+  const m = /^o?d\s*[-_.]?\s*0*(\d+)$/i.exec(s);
   return m ? "OD " + m[1] : s;
 }
 // Older app versions wrote "Towards Colombo / Godagama" and "Towards Avissawella"

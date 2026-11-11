@@ -355,9 +355,9 @@ $('theme-toggle').addEventListener('click', () => {
 // ---------------------------------------------------------------------
 const inputName = $('surveyor-name');
 const inputLocation = $('survey-location');
-// "od2", "OD 02", "Od-6" -> "OD 2", "OD 6": one name per station.
+// "od2", "OD 02", "Od-6", "D5" -> "OD 2", "OD 6", "OD 5": one name per station.
 function normStation(v) {
-    const m = /^od\s*[-_.]?\s*0*(\d+)$/i.exec(String(v || '').trim());
+    const m = /^o?d\s*[-_.]?\s*0*(\d+)$/i.exec(String(v || '').trim());
     return m ? `OD ${m[1]}` : String(v || '').trim();
 }
 const inputDirection = $('survey-direction');
