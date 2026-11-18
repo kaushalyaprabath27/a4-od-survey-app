@@ -53,10 +53,10 @@ window.A4_CONFIG = {
             'Motor Cycles': 50, 'Three Wheeler': 23, 'Car/Jeep/SUV/Double Cab': 25, 'Van': 7, 'Medium Bus': 2,
             'Light Truck (2 axles / 4 wheels)': 8, 'Medium Truck (2 axles / 6 wheels)': 7, 'Large Truck (2 axles / 6 wheels)': 9,
             'Heavy Vehicle (3 axles / 10 wheels)': 2, 'Container with trailer (20 ft + 40 ft)': 2 } },
-        // OD 7 (A007 Avissawella-Hatton Highway near Talduwa): daily target / 23 enumerators, rounded up.
-        'OD 7': { enumerators: 23, byLine: {
-            'Motor Cycles': 33, 'Three Wheeler': 31, 'Car/Jeep/SUV/Double Cab': 22, 'Van': 7, 'Medium Bus': 2,
-            'Light Truck (2 axles / 4 wheels)': 6, 'Medium Truck (2 axles / 6 wheels)': 4, 'Large Truck (2 axles / 6 wheels)': 7,
+        // OD 7 (A007 Avissawella-Hatton Highway near Talduwa): daily target / 20 enumerators, rounded up.
+        'OD 7': { enumerators: 20, byLine: {
+            'Motor Cycles': 38, 'Three Wheeler': 35, 'Car/Jeep/SUV/Double Cab': 25, 'Van': 7, 'Medium Bus': 2,
+            'Light Truck (2 axles / 4 wheels)': 7, 'Medium Truck (2 axles / 6 wheels)': 4, 'Large Truck (2 axles / 6 wheels)': 8,
             'Heavy Vehicle (3 axles / 10 wheels)': 1, 'Container with trailer (20 ft + 40 ft)': 2 } }
     }
 };
