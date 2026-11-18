@@ -224,34 +224,31 @@ function findRowByEventId(eventId) {
 }
 
 // "retry" = the interview row is not in the sheet yet (the app sends the photo again later).
+// No script lock here: the photo only fills two cells of a row that already exists, so it
+// cannot clash with new rows being added, and interviews never wait behind photo uploads.
+// Each phone sends its photos one at a time, and a photo already linked is not saved again.
 function handlePhoto(data) {
   const eventId = String(data.eventId || "");
   const image = String(data.image || "");
   const m = /^data:image\/(jpeg|png);base64,([A-Za-z0-9+\/=]+)$/.exec(image);
   if (!eventId || !m || image.length > PHOTO_MAX_CHARS) return responseJson({ status: "error", message: "Not a photo, or too large." });
-  const lock = LockService.getScriptLock();
-  if (!lock.tryLock(LOCK_WAIT_MS)) return responseJson({ status: "retry", message: "Server busy." });
+  const at = findRowByEventId(eventId);
+  if (!at) return responseJson({ status: "retry", message: "Interview not in the sheet yet." });
+  const linkCol = HEADERS.indexOf("Vehicle Photo Link") + 1;
+  const photoCol = HEADERS.indexOf("Vehicle Photo") + 1;
+  const existing = String(at.sheet.getRange(at.row, linkCol).getValue() || "");
+  if (existing) return responseJson({ status: "success", duplicate: true, link: existing });
+  const name = (String(data.interviewId || "").replace(/[^\w\-]/g, "_") || eventId) + (m[1] === "png" ? ".png" : ".jpg");
+  const file = getPhotoFolder().createFile(Utilities.newBlob(Utilities.base64Decode(m[2]), "image/" + m[1], name));
+  const link = file.getUrl();
+  at.sheet.getRange(at.row, linkCol).setValue(link);
+  // The picture itself in the cell; if Sheets refuses it, the link is enough.
   try {
-    const at = findRowByEventId(eventId);
-    if (!at) return responseJson({ status: "retry", message: "Interview not in the sheet yet." });
-    const linkCol = HEADERS.indexOf("Vehicle Photo Link") + 1;
-    const photoCol = HEADERS.indexOf("Vehicle Photo") + 1;
-    const existing = String(at.sheet.getRange(at.row, linkCol).getValue() || "");
-    if (existing) return responseJson({ status: "success", duplicate: true, link: existing });
-    const name = (String(data.interviewId || "").replace(/[^\w\-]/g, "_") || eventId) + (m[1] === "png" ? ".png" : ".jpg");
-    const file = getPhotoFolder().createFile(Utilities.newBlob(Utilities.base64Decode(m[2]), "image/" + m[1], name));
-    const link = file.getUrl();
-    at.sheet.getRange(at.row, linkCol).setValue(link);
-    // The picture itself in the cell; if Sheets refuses it, the link is enough.
-    try {
-      at.sheet.getRange(at.row, photoCol).setValue(SpreadsheetApp.newCellImage().setSourceUrl(image).setAltTextTitle(name).build());
-    } catch (e) {
-      at.sheet.getRange(at.row, photoCol).setValue("Photo saved (open the link)");
-    }
-    return responseJson({ status: "success", link: link });
-  } finally {
-    lock.releaseLock();
+    at.sheet.getRange(at.row, photoCol).setValue(SpreadsheetApp.newCellImage().setSourceUrl(image).setAltTextTitle(name).build());
+  } catch (e) {
+    at.sheet.getRange(at.row, photoCol).setValue("Photo saved (open the link)");
   }
+  return responseJson({ status: "success", link: link });
 }
 
 function toRow(item) {
