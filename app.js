@@ -208,8 +208,12 @@ const FORM = [
         hint: 'Amount and unit, e.g. 2.5 tonnes or 40 bags', placeholder: 'e.g. 2.5'
     },
     {
-        id: 'vehicleNo', section: 'Vehicle number', label: 'Vehicle number (number plate)', type: 'plate',
-        hint: 'Two parts: letters (ABC), Sri or the old number (200), then the number (1234)'
+        id: 'vehiclePhoto', section: 'Vehicle number', label: 'Photo of the vehicle (number plate)', type: 'photo', optional: true,
+        hint: 'Tap the camera picture to take the photo. With a photo the number need not be typed.'
+    },
+    {
+        id: 'vehicleNo', label: 'Vehicle number (number plate)', type: 'plate',
+        hint: 'Type it if there is no photo: letters (ABC), Sri or the old number (200), then the number (1234)'
     }
 ];
 
@@ -577,6 +581,7 @@ function buildForm() {
         else if (f.type === 'district') buildDistrictField(q, f);
         else if (f.type === 'amount') buildAmountField(q, f);
         else if (f.type === 'plate') buildPlateField(q, f);
+        else if (f.type === 'photo') buildPhotoField(q, f);
         else buildChoiceField(q, f);
         formEl.appendChild(q);
     });
@@ -593,7 +598,9 @@ function isAnswered(f) {
         if (!f.units) return true;
         return !!v.unit && (v.unit !== 'Other' || !!(v.unitOther || '').trim());
     }
-    if (f.type === 'plate') return !!(v && (v.unknown || ((v.prefix || '').trim() && /^\d{1,4}$/.test(v.number || ''))));
+    if (f.type === 'photo') return !!v;
+    // A photo of the vehicle answers the vehicle number too.
+    if (f.type === 'plate') return !!(answers.vehiclePhoto || (v && (v.unknown || ((v.prefix || '').trim() && /^\d{1,4}$/.test(v.number || '')))));
     if (f.type === 'multi') return Array.isArray(v) && v.length > 0;
     if (!(v && String(v).trim())) return false;
     // "Other" needs its text, and e.g. '6+' needs the exact number.
@@ -1133,7 +1140,8 @@ function buildPlateField(q, f) {
     const set = patch => { answers[f.id] = Object.assign({ prefix: '', number: '' }, answers[f.id] || {}, patch, { unknown: false }); changed(); setStatus(); };
     const setStatus = () => {
         const v = answers[f.id] || {};
-        if (v.unknown) { status.textContent = '✓ ' + PLATE_NOT_NOTED; status.className = 'place-status ok'; }
+        if (answers.vehiclePhoto && !(v.unknown || v.prefix || v.number)) { status.textContent = '✓ Photo taken: typing not needed'; status.className = 'place-status ok'; }
+        else if (v.unknown) { status.textContent = '✓ ' + PLATE_NOT_NOTED; status.className = 'place-status ok'; }
         else if (isAnswered(f)) { status.textContent = `✓ ${v.prefix.trim()} – ${v.number}`; status.className = 'place-status ok'; }
         else if (v.prefix || v.number) { status.textContent = v.number ? 'Type the first part (ABC, SRI or 200)' : 'Type the number'; status.className = 'place-status warn'; }
         else { status.textContent = ''; status.className = 'place-status'; }
@@ -1175,6 +1183,196 @@ function buildPlateField(q, f) {
         setStatus();
     };
 }
+// ----- Vehicle photo: live back-camera view; tap the picture to take the photo -----
+// Photos are kept in IndexedDB (localStorage is too small for them): 'draft' while the
+// form is open, then 'p:<eventId>' once the interview is saved, until the sheet has it.
+const PHOTO_ACTION = 'upload_a4od_photo_v1';
+const PHOTO_DB = 'a4od_photos', PHOTO_STORE = 'photos', PHOTO_MAX = 1024, PHOTO_QUALITY = 0.7;
+let draftPhoto = null;
+let photoDbP = null;
+function photoDb() {
+    if (!photoDbP) {
+        photoDbP = new Promise((resolve, reject) => {
+            if (!window.indexedDB) { reject(new Error('No IndexedDB')); return; }
+            const req = indexedDB.open(PHOTO_DB, 1);
+            req.onupgradeneeded = () => req.result.createObjectStore(PHOTO_STORE);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+        photoDbP.catch(() => { photoDbP = null; });
+    }
+    return photoDbP;
+}
+async function idb(mode, fn) {
+    const db = await photoDb();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(PHOTO_STORE, mode);
+        const req = fn(tx.objectStore(PHOTO_STORE));
+        let out;
+        if (req) req.onsuccess = () => { out = req.result; };
+        tx.oncomplete = () => resolve(out);
+        tx.onerror = tx.onabort = () => reject(tx.error);
+    });
+}
+const photoPut = (k, v) => idb('readwrite', st => st.put(v, k));
+const photoGet = k => idb('readonly', st => st.get(k));
+const photoDel = k => idb('readwrite', st => st.delete(k));
+const photoKeys = () => idb('readonly', st => st.getAllKeys());
+
+function buildPhotoField(q, f) {
+    const box = el('div', 'photo-box');
+    box.setAttribute('role', 'button');
+    box.setAttribute('aria-label', 'Camera: tap to take the photo');
+    const video = el('video', 'photo-video');
+    video.setAttribute('playsinline', '');
+    video.setAttribute('muted', '');
+    video.muted = true;
+    video.autoplay = true;
+    const img = el('img', 'photo-img');
+    img.alt = 'Vehicle photo';
+    const tip = el('div', 'photo-tip', '<i class="fa-solid fa-camera"></i> Tap the picture to take the photo');
+    const msg = el('div', 'photo-msg', 'Scroll here to start the camera');
+    box.append(video, img, msg, tip);
+    const bar = el('div', 'photo-bar');
+    const retake = el('button', 'btn-secondary photo-retake hidden', '<i class="fa-solid fa-rotate-left"></i> Retake');
+    retake.type = 'button';
+    const pick = el('button', 'btn-secondary photo-pick', '<i class="fa-solid fa-camera"></i> Open phone camera');
+    pick.type = 'button';
+    const file = el('input');
+    file.type = 'file';
+    file.accept = 'image/*';
+    file.setAttribute('capture', 'environment');
+    file.hidden = true;
+    bar.append(retake, pick, file);
+    q.append(box, bar);
+
+    let stream = null, wanted = false, starting = false;
+    const showMsg = t => { msg.textContent = t; msg.classList.toggle('hidden', !t); };
+    const stop = () => {
+        if (stream) stream.getTracks().forEach(t => t.stop());
+        stream = null;
+        video.srcObject = null;
+        box.classList.remove('live');
+    };
+    const start = async () => {
+        if (stream || starting || answers[f.id] || !wanted) return;
+        if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) { showMsg('Live camera not available here: use Open phone camera.'); return; }
+        starting = true;
+        showMsg('Starting the camera…');
+        try {
+            const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 960 } }, audio: false });
+            if (!wanted || answers[f.id]) { s.getTracks().forEach(t => t.stop()); return; }
+            stream = s;
+            video.srcObject = s;
+            await video.play().catch(() => {});
+            box.classList.add('live');
+            showMsg('');
+        } catch (e) {
+            showMsg(e && e.name === 'NotAllowedError'
+                ? 'Camera blocked: allow the camera for this site, or use Open phone camera.'
+                : 'Camera not available: use Open phone camera.');
+        } finally { starting = false; }
+    };
+    const shrink = (src, w, h) => {
+        const k = Math.min(1, PHOTO_MAX / Math.max(w, h));
+        const c = document.createElement('canvas');
+        c.width = Math.round(w * k);
+        c.height = Math.round(h * k);
+        c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
+        return c.toDataURL('image/jpeg', PHOTO_QUALITY);
+    };
+    const keep = async dataUrl => {
+        draftPhoto = dataUrl;
+        try { await photoPut('draft', dataUrl); } catch (e) { /* kept in memory only */ }
+        answers[f.id] = true;
+        stop();
+        changed();
+        renderers[f.id]();
+        if (renderers.vehicleNo) renderers.vehicleNo();
+        showToast('Photo taken', 'success');
+    };
+    box.addEventListener('click', () => {
+        if (answers[f.id]) return;
+        if (!stream || !video.videoWidth) { wanted = true; start(); return; }
+        box.classList.add('flash');
+        setTimeout(() => box.classList.remove('flash'), 200);
+        keep(shrink(video, video.videoWidth, video.videoHeight));
+    });
+    retake.addEventListener('click', async () => {
+        draftPhoto = null;
+        answers[f.id] = null;
+        try { await photoDel('draft'); } catch (e) { /* nothing kept */ }
+        changed();
+        wanted = true;
+        renderers[f.id]();
+        if (renderers.vehicleNo) renderers.vehicleNo();
+    });
+    pick.addEventListener('click', () => file.click());
+    file.addEventListener('change', () => {
+        const fl = file.files && file.files[0];
+        file.value = '';
+        if (!fl) return;
+        const url = URL.createObjectURL(fl);
+        const im = new Image();
+        im.onload = () => { keep(shrink(im, im.naturalWidth, im.naturalHeight)); URL.revokeObjectURL(url); };
+        im.onerror = () => { showToast('Could not read that photo', 'error'); URL.revokeObjectURL(url); };
+        im.src = url;
+    });
+    // The camera runs only while this question is on screen (saves battery).
+    if ('IntersectionObserver' in window) {
+        new IntersectionObserver(entries => entries.forEach(e => {
+            wanted = e.isIntersecting && screens.survey.classList.contains('active');
+            if (wanted) start(); else stop();
+        }), { threshold: 0.3 }).observe(box);
+    } else {
+        wanted = true;
+    }
+    document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); else if (wanted) start(); });
+    renderers[f.id] = () => {
+        const has = !!answers[f.id];
+        box.classList.toggle('has-photo', has && !!draftPhoto);
+        if (has && draftPhoto) img.src = draftPhoto; else img.removeAttribute('src');
+        retake.classList.toggle('hidden', !has);
+        pick.classList.toggle('hidden', has);
+        tip.classList.toggle('hidden', has);
+        if (has) { stop(); showMsg(draftPhoto ? '' : 'Photo kept on this phone'); }
+        else if (wanted) start();
+        else if (!stream) showMsg('Scroll here to start the camera');
+    };
+}
+
+// Photos go to the sheet one by one, after their interview has synced.
+let photoSyncing = false, photosPending = 0, lastPhotoError = null;
+async function syncPhotos() {
+    if (photoSyncing || !navigator.onLine || !isBackendConfigured()) return;
+    photoSyncing = true;
+    try {
+        const keys = (await photoKeys()).filter(k => String(k).startsWith('p:'));
+        photosPending = keys.length;
+        const waiting = new Set(readJSON(QUEUE_KEY, []).map(r => r.eventId));
+        for (const k of keys) {
+            const p = await photoGet(k);
+            if (!p) { await photoDel(k); photosPending--; continue; }
+            if (waiting.has(p.eventId)) continue; // its interview is not in the sheet yet
+            const res = await fetch(CONFIG.appsScriptUrl, {
+                method: 'POST',
+                body: JSON.stringify(Object.assign({ action: PHOTO_ACTION }, p)),
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+            });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const r = await res.json();
+            if (r.status === 'success') { await photoDel(k); photosPending--; }
+            else if (r.status !== 'retry') throw new Error(r.message || 'Photo not accepted');
+        }
+        lastPhotoError = null;
+    } catch (e) {
+        lastPhotoError = (e && e.message) || String(e);
+    } finally {
+        photoSyncing = false;
+        updateSyncStatus();
+    }
+}
+
 function plateValue(id, part) {
     if (!shown(id)) return '';
     const v = answers[id] || {};
@@ -1357,6 +1555,8 @@ function buildRecord(fix, interviewId, ts) {
 
 function resetForm() {
     answers = {};
+    draftPhoto = null;
+    photoDel('draft').catch(() => {});
     saveDraft();
     renderAllFromAnswers();
     updateAutoInfo();
@@ -1388,6 +1588,8 @@ $('btn-save').addEventListener('click', async () => {
     let fix = null;
     try { fix = await interviewFix(); } finally { saving = false; btn.disabled = false; }
     const record = buildRecord(fix, nextInterviewId(true), savedAt);
+    const photo = answers.vehiclePhoto ? draftPhoto : null;
+    if (photo) record.vehiclePhoto = 'Photo taken (sending)';
     const queue = readJSON(QUEUE_KEY, []);
     queue.push(record);
     if (!writeJSON(QUEUE_KEY, queue)) { showToast('STORAGE FULL: response NOT saved!', 'error'); return; }
@@ -1398,6 +1600,11 @@ $('btn-save').addEventListener('click', async () => {
     history.push(record.eventId);
     writeJSON(HISTORY_KEY, history.slice(-50));
     FORM.forEach(f => { if (f.recent) rememberRecent(f, answers[f.id]); });
+    if (photo) {
+        try {
+            await photoPut('p:' + record.eventId, { eventId: record.eventId, interviewId: record.interviewId, date: record.date, station: record.surveyLocation, image: photo });
+        } catch (e) { showToast('The photo could not be kept on this phone', 'error'); }
+    }
 
     resetForm();
     updateCount();
@@ -1435,6 +1642,7 @@ $('btn-undo').addEventListener('click', async () => {
     writeJSON(HISTORY_KEY, history);
     writeJSON(QUEUE_KEY, readJSON(QUEUE_KEY, []).filter(r => r.eventId !== id));
     writeJSON(BACKUP_KEY, readJSON(BACKUP_KEY, []).filter(r => r.eventId !== id));
+    photoDel('p:' + id).catch(() => {});
     releaseInterviewId(record.interviewId);
     updateCount();
     updateAutoInfo();
@@ -1562,6 +1770,7 @@ function syncQueue() {
             inFlightIds = new Set();
             updateSyncStatus();
             if (!lastSyncError && readJSON(QUEUE_KEY, []).length) setTimeout(syncQueue, 800);
+            else syncPhotos();
         });
 }
 
@@ -1575,11 +1784,12 @@ function updateSyncStatus() {
     else if (lastSyncError && pending) { cls += ' error'; label = `Sync error · ${pending} pending`; }
     else if (pending) { cls += ' pending'; label = `Online · ${pending} pending`; }
     else label = 'Online · Synced';
+    if (photosPending > 0) label += ` · ${photosPending} photo${photosPending === 1 ? '' : 's'} to send`;
     node.className = cls;
     node.querySelector('.sync-text').textContent = label;
-    node.title = lastSyncError ? `Last error: ${lastSyncError}` : '';
+    node.title = lastSyncError ? `Last error: ${lastSyncError}` : (lastPhotoError ? `Photos: ${lastPhotoError}` : '');
 }
-window.addEventListener('online', () => { updateSyncStatus(); syncQueue(); });
+window.addEventListener('online', () => { updateSyncStatus(); syncQueue(); syncPhotos(); });
 window.addEventListener('offline', updateSyncStatus);
 
 // ---------------------------------------------------------------------
@@ -1625,6 +1835,10 @@ function init() {
 
     buildSetupLists();
     buildForm();
+    if (answers.vehiclePhoto) {
+        photoGet('draft').then(d => { draftPhoto = d || null; if (!d) answers.vehiclePhoto = null; renderAllFromAnswers(); })
+            .catch(() => { answers.vehiclePhoto = null; renderAllFromAnswers(); });
+    }
     if (session) fillSetupFromSession();
     if (session && session.active) {
         startGps();
@@ -1634,6 +1848,8 @@ function init() {
 
     updateSyncStatus();
     setInterval(syncQueue, SYNC_INTERVAL_MS);
+    setInterval(syncPhotos, SYNC_INTERVAL_MS);
+    syncPhotos();
     setInterval(() => { if (screens.survey.classList.contains('active')) { updateAutoInfo(); updateGpsStatus(); } }, 15000);
     if (!isBackendConfigured()) setTimeout(() => showToast('Apps Script URL not set: data is kept on this device only', 'error'), 600);
     syncQueue();

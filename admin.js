@@ -421,9 +421,10 @@ function recentCard(d) {
         <td><span class="pf ${x[6] === 'P' ? 'p' : 'f'}">${x[6]}</span> ${esc(shortType(x[7]))}</td>
         <td>${esc(x[8] || '–')} → ${esc(x[9] || '–')}</td>
         <td>${esc(x[10] || '–')}</td>
-        <td class="num">${gps(x[11])}</td></tr>`).join('');
+        <td class="num">${gps(x[11])}</td>
+        <td class="num">${/^https:\/\/drive\.google\.com\//.test(x[12] || '') ? `<a href="${esc(x[12])}" target="_blank" rel="noopener" title="Open the vehicle photo"><i class="fa-solid fa-camera"></i></a>` : '<span class="muted">–</span>'}</td></tr>`).join('');
     return head + `<span class="spacer"></span>${pick}</h2>
-        <div class="table-wrap"><table class="recent"><tr><th>Time</th><th>Enumerator / Form No.</th><th>Direction</th><th>Vehicle</th><th>Origin → Destination</th><th>Trip purpose / goods</th><th class="num">GPS</th></tr>${rows || '<tr><td colspan="7" class="empty">No interviews for the station and date picked.</td></tr>'}</table></div>
+        <div class="table-wrap"><table class="recent"><tr><th>Time</th><th>Enumerator / Form No.</th><th>Direction</th><th>Vehicle</th><th>Origin → Destination</th><th>Trip purpose / goods</th><th class="num">GPS</th><th class="num">Photo</th></tr>${rows || '<tr><td colspan="8" class="empty">No interviews for the station and date picked.</td></tr>'}</table></div>
         <p class="muted small card-note">Newest first. P = passenger, F = freight. GPS: green = recorded, orange = position from a few minutes earlier, red = none. The dashboard gets each enumerator's latest 15 interviews.</p></section>`;
 }
 

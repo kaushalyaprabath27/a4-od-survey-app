@@ -33,6 +33,11 @@
  * OD 4 (Aluthambalama): its interviews go to their own tab, "OD 4 Aluthambalama"
  * (same columns). The dashboard, Summary and O-D matrix include every tab.
  *
+ * VEHICLE PHOTOS: the app sends each photo after its interview. It is saved in the
+ * Drive folder "A4 OD vehicle photos" (named by Form No) and shown in the row's
+ * "Vehicle Photo" column, with its Drive link in "Vehicle Photo Link". After pasting
+ * this version, run "setup" once to allow Drive access, then deploy a new version.
+ *
  * SUMMARY + O-D MATRIX: open the sheet, menu "A4 O-D Survey" > Build / refresh
  * summary. It writes a "Summary" tab (counts per answer and survey date) and
  * an "OD Matrix (District)" tab (origin district x destination district,
@@ -85,7 +90,10 @@ const COLUMNS = [
   ["EventID", "eventId", "text"],
   // Added after EventID so older tabs only gain two columns (nothing moves).
   ["Vehicle No. (Letters / Sri)", "vehicleNoPrefix", "keep"],
-  ["Vehicle No. (Number)", "vehicleNoNumber", "keep"]
+  ["Vehicle No. (Number)", "vehicleNoNumber", "keep"],
+  // Added last again: the photo arrives after the interview (see handlePhoto).
+  ["Vehicle Photo", "vehiclePhoto", "text"],
+  ["Vehicle Photo Link", "vehiclePhotoLink", "long"]
 ];
 const HEADERS = COLUMNS.map(function (c) { return c[0]; });
 const EVENT_ID_COL = HEADERS.indexOf("EventID") + 1; // 1-based
@@ -125,6 +133,7 @@ function handleRequest(e) {
     // v4 = current app (vehicle number). v1 - v3 records are still accepted;
     // retired fields are ignored and new ones left blank.
     if (/^submit_a4od_v[1-4]$/.test(action || "")) return handleSubmitBatch(data);
+    if (action === "upload_a4od_photo_v1") return handlePhoto(data);
     if (action === "admin_stats" || action === "admin_set_targets") return handleAdmin(data);
     if (!action) return responseJson({ status: "success", message: "A4 roadside O-D survey backend is running." });
     return responseJson({ status: "error", message: "Invalid action" });
@@ -177,6 +186,69 @@ function handleSubmitBatch(data) {
     if (count) SpreadsheetApp.flush();
     repairIfDue();
     return responseJson({ status: "success", count: count, duplicatesSkipped: duplicatesSkipped });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ---------------------------------------------------------------------
+// Vehicle photos (sent by the app after the interview itself has synced)
+// ---------------------------------------------------------------------
+const PHOTO_FOLDER_NAME = "A4 OD vehicle photos";
+const PHOTO_MAX_CHARS = 4000000; // about 3 MB of image
+
+function getPhotoFolder() {
+  const props = PropertiesService.getScriptProperties();
+  const id = props.getProperty("PHOTO_FOLDER_ID");
+  if (id) {
+    try { return DriveApp.getFolderById(id); } catch (e) {}
+  }
+  const found = DriveApp.getFoldersByName(PHOTO_FOLDER_NAME);
+  const folder = found.hasNext() ? found.next() : DriveApp.createFolder(PHOTO_FOLDER_NAME);
+  props.setProperty("PHOTO_FOLDER_ID", folder.getId());
+  return folder;
+}
+
+function findRowByEventId(eventId) {
+  const tabs = dataTabNames();
+  for (let t = 0; t < tabs.length; t++) {
+    const sheet = getDataSheet(tabs[t]);
+    const last = sheet.getLastRow();
+    if (last < 2) continue;
+    const ids = sheet.getRange(2, EVENT_ID_COL, last - 1, 1).getValues();
+    for (let i = ids.length - 1; i >= 0; i--) {
+      if (String(ids[i][0]) === eventId) return { sheet: sheet, row: i + 2 };
+    }
+  }
+  return null;
+}
+
+// "retry" = the interview row is not in the sheet yet (the app sends the photo again later).
+function handlePhoto(data) {
+  const eventId = String(data.eventId || "");
+  const image = String(data.image || "");
+  const m = /^data:image\/(jpeg|png);base64,([A-Za-z0-9+\/=]+)$/.exec(image);
+  if (!eventId || !m || image.length > PHOTO_MAX_CHARS) return responseJson({ status: "error", message: "Not a photo, or too large." });
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(LOCK_WAIT_MS)) return responseJson({ status: "retry", message: "Server busy." });
+  try {
+    const at = findRowByEventId(eventId);
+    if (!at) return responseJson({ status: "retry", message: "Interview not in the sheet yet." });
+    const linkCol = HEADERS.indexOf("Vehicle Photo Link") + 1;
+    const photoCol = HEADERS.indexOf("Vehicle Photo") + 1;
+    const existing = String(at.sheet.getRange(at.row, linkCol).getValue() || "");
+    if (existing) return responseJson({ status: "success", duplicate: true, link: existing });
+    const name = (String(data.interviewId || "").replace(/[^\w\-]/g, "_") || eventId) + (m[1] === "png" ? ".png" : ".jpg");
+    const file = getPhotoFolder().createFile(Utilities.newBlob(Utilities.base64Decode(m[2]), "image/" + m[1], name));
+    const link = file.getUrl();
+    at.sheet.getRange(at.row, linkCol).setValue(link);
+    // The picture itself in the cell; if Sheets refuses it, the link is enough.
+    try {
+      at.sheet.getRange(at.row, photoCol).setValue(SpreadsheetApp.newCellImage().setSourceUrl(image).setAltTextTitle(name).build());
+    } catch (e) {
+      at.sheet.getRange(at.row, photoCol).setValue("Photo saved (open the link)");
+    }
+    return responseJson({ status: "success", link: link });
   } finally {
     lock.releaseLock();
   }
@@ -569,7 +641,8 @@ function adminStats() {
     (latest[name] = latest[name] || []).push([
       st, date, time, name, String(r[col["Form No"]] || ""), dir, passenger ? "P" : "F", String(r[col["Vehicle Type"]] || ""),
       String(r[col["Origin (Village / Town)"]] || ""), String(r[col["Destination (Village / Town)"]] || ""),
-      String(r[col[passenger ? "Trip Purpose" : "Commodity"]] || ""), String(r[col["GPS Status"]] || "")
+      String(r[col[passenger ? "Trip Purpose" : "Commodity"]] || ""), String(r[col["GPS Status"]] || ""),
+      String(r[col["Vehicle Photo Link"]] || "")
     ]);
     const stamp = date + " " + time;
     const rec = recorders[name];
@@ -587,7 +660,7 @@ function adminStats() {
     targets: readTargets(),
     counts: Object.keys(agg).map(function (k) { return k.split("\u0001").concat([agg[k]]); }),
     recorders: Object.keys(recorders).map(function (n) { return { name: n, station: recorders[n].station, last: recorders[n].last }; }),
-    // [station, date, time, enumerator, form no, direction, P/F, vehicle type, origin, destination, purpose or goods, GPS status]
+    // [station, date, time, enumerator, form no, direction, P/F, vehicle type, origin, destination, purpose or goods, GPS status, photo link]
     recent: Object.keys(latest).reduce(function (out, n) {
       return out.concat(latest[n].sort(function (a, b) { return (b[1] + " " + b[2]).localeCompare(a[1] + " " + a[2]); }).slice(0, RECENT_PER_ENUMERATOR));
     }, [])
@@ -601,6 +674,7 @@ function setup() {
   dataTabNames().forEach(function (name) { getDataSheet(name); });
   getTargetsSheet();
   repairData();
+  Logger.log("Photo folder: " + getPhotoFolder().getUrl()); // asks for Drive access the first time
   Logger.log("Data sheet ready: " + sheet.getParent().getUrl());
 }
 
