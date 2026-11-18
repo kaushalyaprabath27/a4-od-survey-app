@@ -1360,13 +1360,20 @@ async function syncPhotos() {
                 headers: { 'Content-Type': 'text/plain;charset=utf-8' }
             });
             if (!res.ok) throw new Error('HTTP ' + res.status);
-            const r = await res.json();
+            const text = await res.text();
+            let r;
+            try { r = JSON.parse(text); } catch (e) {
+                throw new Error('The sheet answered with a web page, not data (the script may need permission: run setup in Apps Script).');
+            }
             if (r.status === 'success') { await photoDel(k); photosPending--; }
             else if (r.status !== 'retry') throw new Error(r.message || 'Photo not accepted');
         }
         lastPhotoError = null;
     } catch (e) {
-        lastPhotoError = (e && e.message) || String(e);
+        const msg = (e && e.message) || String(e);
+        // Say it once on screen (phones cannot show the hover text); tap the status to see it again.
+        if (msg !== lastPhotoError && !/Failed to fetch|NetworkError|Load failed/i.test(msg)) showToast('Photo not sent: ' + msg, 'error');
+        lastPhotoError = msg;
     } finally {
         photoSyncing = false;
         updateSyncStatus();
@@ -1790,6 +1797,27 @@ function updateSyncStatus() {
     node.title = lastSyncError ? `Last error: ${lastSyncError}` : (lastPhotoError ? `Photos: ${lastPhotoError}` : '');
 }
 window.addEventListener('online', () => { updateSyncStatus(); syncQueue(); syncPhotos(); });
+
+// Tap the status to see what is waiting on this phone and why, and to send now.
+$('sync-status').addEventListener('click', async () => {
+    let photos = photosPending;
+    try { photos = (await photoKeys()).filter(k => String(k).startsWith('p:')).length; } catch (e) { /* keep the last count */ }
+    const pending = readJSON(QUEUE_KEY, []).length;
+    const send = await openModal({
+        title: 'Sending to the sheet',
+        html: `<table>
+            <tr><td>Interviews waiting on this phone</td><td>${pending}</td></tr>
+            <tr><td>Photos waiting on this phone</td><td>${photos}</td></tr>
+            <tr><td>Internet</td><td>${navigator.onLine ? 'Online' : 'Offline'}</td></tr>
+        </table>` +
+            (lastSyncError ? `<p style="margin-top:0.6rem"><b>Interviews:</b> ${escapeHtml(lastSyncError)}</p>` : '') +
+            (lastPhotoError ? `<p style="margin-top:0.6rem"><b>Photos:</b> ${escapeHtml(lastPhotoError)}</p>` : '') +
+            (!lastSyncError && !lastPhotoError ? '<p style="margin-top:0.6rem">No errors.</p>' : ''),
+        okLabel: 'Send now',
+        cancelLabel: 'Close'
+    });
+    if (send) { lastPhotoError = null; syncQueue(); syncPhotos(); }
+});
 window.addEventListener('offline', updateSyncStatus);
 
 // ---------------------------------------------------------------------

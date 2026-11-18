@@ -216,7 +216,7 @@ input::placeholder, textarea::placeholder { color: var(--text-secondary); }
 }
 .icon-btn.danger { color: #fff; background: var(--danger); border-color: transparent; }
 
-.sync-status { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--text-secondary); white-space: nowrap; }
+.sync-status { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--text-secondary); white-space: nowrap; cursor: pointer; }
 .sync-status .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); }
 .sync-status.pending .dot { background: var(--warn); }
 .sync-status.syncing .dot { background: var(--accent); animation: blink 1s infinite; }
