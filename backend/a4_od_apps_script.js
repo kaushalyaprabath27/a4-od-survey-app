@@ -402,7 +402,7 @@ const VEHICLE_CLASSES = [
   ["Container", "Freight", ["Container with trailer", "Container (20 ft / 3 axle)", "Multi-axle container (40 ft)"]],
   ["Other freight", "Freight", ["Other"]]
 ];
-// Targets filled in when the Targets tab is first made (OD 1, OD 2, OD 4 and OD 5 from
+// Targets filled in when the Targets tab is first made (OD 1, OD 2, OD 4, OD 5 and OD 7 from
 // the sampling plan; hours = survey hours per day, 12 if not given). Change them
 // in the Targets tab or on the dashboard.
 // OD 1 (A008 near Ingiriya): Light truck -> Small Truck; Medium truck -> Medium Truck;
@@ -416,7 +416,10 @@ const DEFAULT_TARGETS = {
             "Small Truck": 200, "Medium Truck": 150, "Heavy Truck": 150, "Container": 10 },
   // OD 5 (B240 Kotte-Bope Road near Watareka): Large truck 160 + Heavy vehicle 25 -> Heavy Truck 185; containers 10 + 4 -> 14.
   "OD 5": { hours: 6, "Motor Cycles": 900, "Three Wheeler": 400, "Car/Jeep/SUV/Double Cab": 450, "Van": 120, "Mini Bus": 20,
-            "Small Truck": 130, "Medium Truck": 124, "Heavy Truck": 185, "Container": 14 }
+            "Small Truck": 130, "Medium Truck": 124, "Heavy Truck": 185, "Container": 14 },
+  // OD 7 (A007 Avissawella-Hatton Highway near Talduwa): Large truck 150 + Heavy vehicle 8 -> Heavy Truck 158; containers 2 + 2 -> 4.
+  "OD 7": { hours: 6, "Motor Cycles": 750, "Three Wheeler": 700, "Car/Jeep/SUV/Double Cab": 500, "Van": 140, "Mini Bus": 30,
+            "Small Truck": 130, "Medium Truck": 80, "Heavy Truck": 158, "Container": 4 }
 };
 const STATIONS = ["OD 1", "OD 2", "OD 3", "OD 4", "OD 5", "OD 6", "OD 7"];
 const RECENT_PER_ENUMERATOR = 15; // latest interviews of each enumerator sent to the dashboard
