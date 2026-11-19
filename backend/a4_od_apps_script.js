@@ -30,8 +30,10 @@
  * once: Project Settings (gear) > Script properties > Add script property >
  * ADMIN_PASSWORD = the password. It is not written in this file.
  *
- * OD 4 (Aluthambalama): its interviews go to their own tab, "OD 4 Aluthambalama"
- * (same columns). The dashboard, Summary and O-D matrix include every tab.
+ * OD 4 (Aluthambalama) and OD 6 (Godagama): their interviews go to their own tabs,
+ * "OD 4 Aluthambalama" and "OD 6 Godagama" (same columns; a tab is made with the
+ * first interview). The dashboard, Summary and O-D matrix include every tab.
+ * OD 6 interviews saved before its tab existed (4 Nov) stay in the main tab.
  *
  * VEHICLE PHOTOS: the app sends each photo after its interview. It is saved in the
  * Drive folder "A4 OD vehicle photos" (named by Form No) and shown in the row's
@@ -389,7 +391,7 @@ function getDataSheet(name) {
 }
 
 // Stations whose records go to their own tab (same columns as the main tab).
-const STATION_TABS = { "OD 4": "OD 4 Aluthambalama" };
+const STATION_TABS = { "OD 4": "OD 4 Aluthambalama", "OD 6": "OD 6 Godagama" };
 function tabForStation(station) { return STATION_TABS[String(station || "").trim()] || DATA_SHEET_NAME; }
 function dataTabNames() {
   return [DATA_SHEET_NAME].concat(Object.keys(STATION_TABS).map(function (k) { return STATION_TABS[k]; }));
@@ -471,7 +473,7 @@ const VEHICLE_CLASSES = [
   ["Container", "Freight", ["Container with trailer", "Container (20 ft / 3 axle)", "Multi-axle container (40 ft)"]],
   ["Other freight", "Freight", ["Other"]]
 ];
-// Targets filled in when the Targets tab is first made (OD 1, OD 2, OD 4, OD 5 and OD 7 from
+// Targets filled in when the Targets tab is first made (OD 1, OD 2, OD 4, OD 5, OD 6 and OD 7 from
 // the sampling plan; hours = survey hours per day, 12 if not given). Change them
 // in the Targets tab or on the dashboard.
 // OD 1 (A008 near Ingiriya): Light truck -> Small Truck; Medium truck -> Medium Truck;
@@ -486,6 +488,9 @@ const DEFAULT_TARGETS = {
   // OD 5 (B240 Kotte-Bope Road near Watareka): Large truck 160 + Heavy vehicle 25 -> Heavy Truck 185; containers 10 + 4 -> 14.
   "OD 5": { hours: 6, "Motor Cycles": 900, "Three Wheeler": 400, "Car/Jeep/SUV/Double Cab": 450, "Van": 120, "Mini Bus": 20,
             "Small Truck": 130, "Medium Truck": 124, "Heavy Truck": 185, "Container": 14 },
+  // OD 6 (A004 Highway near Godagama Junction, 7 hours): Large truck 180 + Heavy vehicle 12 -> Heavy Truck 192; containers 4 + 4 -> 8.
+  "OD 6": { hours: 7, "Motor Cycles": 1100, "Three Wheeler": 800, "Car/Jeep/SUV/Double Cab": 800, "Van": 200, "Mini Bus": 30,
+            "Small Truck": 260, "Medium Truck": 150, "Heavy Truck": 192, "Container": 8 },
   // OD 7 (A007 Avissawella-Hatton Highway near Talduwa): Large truck 150 + Heavy vehicle 8 -> Heavy Truck 158; containers 2 + 2 -> 4.
   "OD 7": { hours: 6, "Motor Cycles": 750, "Three Wheeler": 700, "Car/Jeep/SUV/Double Cab": 500, "Van": 140, "Mini Bus": 30,
             "Small Truck": 130, "Medium Truck": 80, "Heavy Truck": 158, "Container": 4 }

@@ -53,6 +53,11 @@ window.A4_CONFIG = {
             'Motor Cycles': 50, 'Three Wheeler': 23, 'Car/Jeep/SUV/Double Cab': 25, 'Van': 7, 'Medium Bus': 2,
             'Light Truck (2 axles / 4 wheels)': 8, 'Medium Truck (2 axles / 6 wheels)': 7, 'Large Truck (2 axles / 6 wheels)': 9,
             'Heavy Vehicle (3 axles / 10 wheels)': 2, 'Container with trailer (20 ft + 40 ft)': 2 } },
+        // OD 6 (A004 Highway near Godagama Junction): daily target / 30 enumerators, rounded up.
+        'OD 6': { enumerators: 30, byLine: {
+            'Motor Cycles': 37, 'Three Wheeler': 27, 'Car/Jeep/SUV/Double Cab': 27, 'Van': 7, 'Medium Bus': 1,
+            'Light Truck (2 axles / 4 wheels)': 9, 'Medium Truck (2 axles / 6 wheels)': 5, 'Large Truck (2 axles / 6 wheels)': 6,
+            'Heavy Vehicle (3 axles / 10 wheels)': 1, 'Container with trailer (20 ft + 40 ft)': 2 } },
         // OD 7 (A007 Avissawella-Hatton Highway near Talduwa): daily target / 20 enumerators, rounded up.
         'OD 7': { enumerators: 20, byLine: {
             'Motor Cycles': 38, 'Three Wheeler': 35, 'Car/Jeep/SUV/Double Cab': 25, 'Van': 7, 'Medium Bus': 2,
