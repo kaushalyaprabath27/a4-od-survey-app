@@ -599,12 +599,60 @@ function saveTargets(targets) {
   sheet.getRange(1, 1, values.length, head.length).setValues(values);
 }
 
+// Two enumerators who used the same name on the same day: on the dashboard each
+// phone gets a number, the phone that started first is 1: "Ashen 1", "Ashen 2".
+// The sheet keeps the name as typed. One line per "date|name".
+const SAME_NAME_SPLITS = ["2026-11-19|Ashen"];
+
+// Which phone each shift of a doubled name belongs to: "date|name" -> { shift start: phone no }.
+// A phone can start several shifts in a day, but its form numbers keep counting
+// (…-001 … -020, next shift -021 …), so a shift whose first form follows straight on
+// from a phone's last form is that phone's next shift.
+function samePhoneNumbers(rows, col) {
+  const shifts = {}; // "date|name" -> shift start -> { lo, hi, first, last }
+  rows.forEach(function (r) {
+    const k = String(r[col["Date"]] || "").trim() + "|" + String(r[col["Recorder"]] || "").trim();
+    if (SAME_NAME_SPLITS.indexOf(k) < 0) return;
+    const s = String(r[col["Shift Start"]] || "").trim();
+    const m = /(\d+)\s*$/.exec(String(r[col["Form No"]] || ""));
+    const no = m ? Number(m[1]) : 0;
+    const t = String(r[col["Time"]] || "").trim().replace(/^(\d)(?=:)/, "0$1");
+    const g = ((shifts[k] = shifts[k] || {})[s] = shifts[k][s] || { lo: Infinity, hi: 0, first: "99", last: "" });
+    if (no) { g.lo = Math.min(g.lo, no); g.hi = Math.max(g.hi, no); }
+    if (t < g.first) g.first = t;
+    if (t > g.last) g.last = t;
+  });
+  const out = {};
+  Object.keys(shifts).forEach(function (k) {
+    const list = Object.keys(shifts[k]).map(function (s) { return Object.assign({ shift: s }, shifts[k][s]); })
+      .sort(function (a, b) { return a.first.localeCompare(b.first); });
+    const phones = []; // { hi, last }
+    out[k] = {};
+    list.forEach(function (g) {
+      // The phone this shift continues: its last form is just before this shift's first, and it ended before.
+      let best = -1;
+      phones.forEach(function (p, i) {
+        if (p.hi < g.lo && p.last <= g.first && (best < 0 || p.hi > phones[best].hi)) best = i;
+      });
+      if (best < 0 || g.lo - phones[best].hi > 3) { phones.push({ hi: 0, last: "" }); best = phones.length - 1; }
+      phones[best].hi = Math.max(phones[best].hi, g.hi);
+      phones[best].last = g.last;
+      out[k][g.shift] = best + 1;
+    });
+  });
+  return out;
+}
+
 // Counts for the dashboard as [station, date, what, value, n] rows; the page
 // adds them up for the station and date picked.
 function adminStats() {
   const rows = readAllRows();
   const col = {};
   HEADERS.forEach(function (h, i) { col[h] = i; });
+  const splitKey = function (r) {
+    return String(r[col["Date"]] || "").trim() + "|" + String(r[col["Recorder"]] || "").trim();
+  };
+  const shiftNo = samePhoneNumbers(rows, col);
   const agg = {};
   const add = function (st, date, what, value) {
     const k = [st, date, what, value].join("\u0001");
@@ -621,7 +669,9 @@ function adminStats() {
     const hour = m ? ("0" + m[1]).slice(-2) : "??";
     const cls = vehicleClass(String(r[col["Vehicle Category"]]).trim(), r[col["Vehicle Type"]]);
     const dir = normDirection(r[col["Direction"]]) || "(no direction)";
-    const name = String(r[col["Recorder"]] || "").trim() || "(no name)";
+    const typed = String(r[col["Recorder"]] || "").trim() || "(no name)";
+    const no = shiftNo[splitKey(r)];
+    const name = no ? typed + " " + no[String(r[col["Shift Start"]] || "").trim()] : typed;
     add(st, date, "class", cls);
     add(st, date, "classDir", cls + "|" + dir);
     const type = String(r[col["Vehicle Type"]] || "").trim().replace(/^Other:.*$/, "Other") || "(no type)";
