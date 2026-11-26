@@ -30,10 +30,12 @@
  * once: Project Settings (gear) > Script properties > Add script property >
  * ADMIN_PASSWORD = the password. It is not written in this file.
  *
- * OD 4 (Aluthambalama) and OD 6 (Godagama): their interviews go to their own tabs,
- * "OD 4 Aluthambalama" and "OD 6 Godagama" (same columns; a tab is made with the
- * first interview). The dashboard, Summary and O-D matrix include every tab.
- * OD 6 interviews saved before its tab existed (4 Nov) stay in the main tab.
+ * OD 3 (Meepe), OD 4 (Aluthambalama) and OD 6 (Godagama): their interviews go to their
+ * own tabs, "OD 3 Meepe", "OD 4 Aluthambalama" and "OD 6 Godagama" (same columns; a tab
+ * is made with the first interview). The dashboard, Summary and O-D matrix include every tab.
+ * OD 3 and OD 6 interviews saved before their tabs existed stay in the main tab.
+ * OD 3 has the same daily targets as OD 6 (copied from the OD 6 row of the Targets tab
+ * the first time the dashboard opens while the OD 3 row is blank); no per-enumerator target.
  *
  * VEHICLE PHOTOS: the app sends each photo after its interview. It is saved in the
  * Drive folder "A4 OD vehicle photos" (named by Form No) and shown in the row's
@@ -391,7 +393,7 @@ function getDataSheet(name) {
 }
 
 // Stations whose records go to their own tab (same columns as the main tab).
-const STATION_TABS = { "OD 4": "OD 4 Aluthambalama", "OD 6": "OD 6 Godagama" };
+const STATION_TABS = { "OD 3": "OD 3 Meepe", "OD 4": "OD 4 Aluthambalama", "OD 6": "OD 6 Godagama" };
 function tabForStation(station) { return STATION_TABS[String(station || "").trim()] || DATA_SHEET_NAME; }
 function dataTabNames() {
   return [DATA_SHEET_NAME].concat(Object.keys(STATION_TABS).map(function (k) { return STATION_TABS[k]; }));
@@ -495,6 +497,11 @@ const DEFAULT_TARGETS = {
   "OD 7": { hours: 6, "Motor Cycles": 750, "Three Wheeler": 700, "Car/Jeep/SUV/Double Cab": 500, "Van": 140, "Mini Bus": 30,
             "Small Truck": 130, "Medium Truck": 80, "Heavy Truck": 158, "Container": 4 }
 };
+// OD 3 (A004 west of Meepe junction): same targets as OD 6 (Godagama).
+DEFAULT_TARGETS["OD 3"] = DEFAULT_TARGETS["OD 6"];
+// Stations that start with another station's targets: "station": "copied from". Done once,
+// while the station's row in the Targets tab has no vehicle targets (later edits are kept).
+const TARGETS_FROM = { "OD 3": "OD 6" };
 const STATIONS = ["OD 1", "OD 2", "OD 3", "OD 4", "OD 5", "OD 6", "OD 7"];
 const RECENT_PER_ENUMERATOR = 15; // latest interviews of each enumerator sent to the dashboard
 
@@ -560,8 +567,27 @@ function getTargetsSheet() {
   return sheet;
 }
 
+// Fills a blank (or missing) station row with the row of the station in TARGETS_FROM.
+function fillTargetsFrom(sheet, values) {
+  const rowOf = function (name) {
+    for (let r = 1; r < values.length; r++) if (String(values[r][0]).trim() === name) return r;
+    return -1;
+  };
+  Object.keys(TARGETS_FROM).forEach(function (st) {
+    const from = rowOf(TARGETS_FROM[st]);
+    if (from < 0) return;
+    let r = rowOf(st);
+    if (r >= 0 && values[r].slice(2).some(function (v) { return v !== ""; })) return; // has its own targets
+    const row = [st].concat(values[from].slice(1));
+    if (r < 0) { values.push(row); r = values.length - 1; } else values[r] = row;
+    sheet.getRange(r + 1, 1, 1, row.length).setValues([row]);
+  });
+}
+
 function readTargets() {
-  const values = getTargetsSheet().getDataRange().getValues();
+  const sheet = getTargetsSheet();
+  const values = sheet.getDataRange().getValues();
+  fillTargetsFrom(sheet, values);
   const head = values[0].map(String);
   const out = {};
   for (let r = 1; r < values.length; r++) {
